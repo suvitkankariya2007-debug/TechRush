@@ -1,0 +1,26 @@
+# Environment & Secrets (CRITICAL)
+.env
+.env.*
+*.env
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+ENV/
+
+# Database / Storage
+*.sqlite3
+*.db
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db
