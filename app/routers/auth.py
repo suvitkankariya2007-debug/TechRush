@@ -11,12 +11,6 @@ from app.jwt import create_jwt
 from app.config import settings
 from datetime import datetime, timedelta
 
-import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Request
-from app.database import get_db
-from app.schemas import UserCreate, UserResponse
-from app.crud import get_user_by_email, create_user
-
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 

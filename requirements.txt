@@ -1,6 +1,24 @@
+# Web framework
 fastapi
 uvicorn[standard]
+
+# Database (PostgreSQL async)
 asyncpg
 pydantic-settings
+
+# Auth
 python-jose
 webauthn
+
+# AI Risk Engine (Modules 1-8)
+scikit-learn
+numpy
+joblib
+pandas
+
+# LLM Fallback (Module 3) — optional, loaded only when API keys are set
+google-generativeai
+openai
+
+# Testing
+pytest
