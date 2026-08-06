@@ -1,406 +1,320 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <!-- BASIC PAGE CONFIGURATION -->
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="VaultID - Passwordless Zero-Trust Authentication">
-    <title>VaultID • Zero-Trust Authentication</title>
-
-    <!-- Google Font -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.5, user-scalable=yes">
+    <title>VaultID · Secure Banking</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-
-    <!-- Font Awesome (for icons) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-    <div class="app-container">
-
-        <!-- ===================================== -->
-        <!-- HEADER - Microsoft Authenticator Style -->
-        <!-- ===================================== -->
-        <header class="header">
-            <div class="header-left">
-                <div class="logo-container">
-                    <i class="fas fa-shield-halved logo-icon"></i>
-                    <h1>VaultID</h1>
+    <div id="toastContainer" class="toast-container"></div>
+    <div id="app">
+        <!-- LOGIN PAGE -->
+        <div id="page-login" class="auth-container">
+            <div class="auth-card">
+                <div class="auth-header">
+                    <div class="logo">
+                        <i class="fas fa-shield-alt" style="color:#1a237e; font-size:2rem;"></i>
+                        <span style="font-weight:700; font-size:1.5rem; color:#1a237e;">VaultID</span>
+                    </div>
+                    <h1 class="auth-title">Secure Sign In</h1>
+                    <p class="auth-subtitle">Passwordless authentication for your banking</p>
                 </div>
-                <p class="header-subtitle">Zero-Trust Authentication</p>
-            </div>
-
-            <!-- Status Indicators -->
-            <div class="header-center">
-                <div class="status-badge">
-                    <span class="status-dot active"></span>
-                    <span class="status-text">Active</span>
-                </div>
-                <span class="header-divider">|</span>
-                <div class="device-count">
-                    <i class="fas fa-laptop"></i>
-                    <span>2 devices</span>
-                </div>
-                <span class="header-divider">|</span>
-                <div class="risk-badge low">
-                    <span class="risk-dot"></span>
-                    <span>12% Risk</span>
-                </div>
-            </div>
-
-            <!-- Right Side -->
-            <div class="header-right">
-                <button class="icon-btn" title="Notifications">
-                    <i class="fas fa-bell"></i>
-                    <span class="notification-dot"></span>
-                </button>
-                <div class="user-avatar">
-                    <span>JD</span>
-                </div>
-                <button class="icon-btn logout-btn" title="Logout">
-                    <i class="fas fa-sign-out-alt"></i>
-                </button>
-            </div>
-        </header>
-
-        <!-- ===================================== -->
-        <!-- SUB-NAVIGATION -->
-        <!-- ===================================== -->
-        <nav class="sub-nav">
-            <div class="sub-nav-inner">
-                <button class="nav-tab active" data-tab="main">
-                    <i class="fas fa-gauge-high"></i>
-                    Dashboard
-                </button>
-                <button class="nav-tab" data-tab="devices">
-                    <i class="fas fa-laptop"></i>
-                    Devices
-                </button>
-                <button class="nav-tab" data-tab="alerts">
-                    <i class="fas fa-bell"></i>
-                    Alerts
-                    <span class="tab-badge">3</span>
-                </button>
-                <button class="nav-tab" data-tab="history">
-                    <i class="fas fa-clock-rotate-left"></i>
-                    History
-                </button>
-                <button class="nav-tab" data-tab="recovery">
-                    <i class="fas fa-life-ring"></i>
-                    Recovery
-                </button>
-            </div>
-        </nav>
-
-        <!-- ===================================== -->
-        <!-- MAIN CONTENT -->
-        <!-- ===================================== -->
-        <main class="dashboard">
-
-            <!-- ================================ -->
-            <!-- TAB CONTENT: DASHBOARD (Main) -->
-            <!-- ================================ -->
-            <section id="tab-main" class="tab-content active-tab">
-
-                <!-- Session Status Card -->
-                <div class="session-card">
-                    <div class="session-card-left">
-                        <div class="session-status">
-                            <span class="status-dot active"></span>
-                            <span class="session-label">Session Active</span>
-                        </div>
-                        <h2 class="session-title">Secure & Trusted</h2>
-                        <p class="session-time">
-                            <i class="far fa-clock"></i>
-                            <span id="currentTime"></span>
-                        </p>
-                        <div class="session-meta">
-                            <span class="meta-item">
-                                <i class="fas fa-fingerprint"></i>
-                                Passkey Authenticated
-                            </span>
-                            <span class="meta-item">
-                                <i class="fas fa-shield-check"></i>
-                                Zero-Trust Active
-                            </span>
+                <div class="auth-body">
+                    <div class="input-group">
+                        <label for="loginEmail">Email address</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-envelope input-icon"></i>
+                            <input type="email" id="loginEmail" placeholder="Enter your email">
                         </div>
                     </div>
-                    <div class="session-card-right">
-                        <div class="risk-score-circle">
-                            <span class="risk-number">12%</span>
-                            <span class="risk-label">Risk Score</span>
+                    <button id="loginPasskeyBtn" class="btn btn-primary btn-lg btn-block">
+                        <i class="fas fa-fingerprint"></i> Sign in with Passkey
+                    </button>
+                    <div class="auth-divider"><span>or continue with</span></div>
+                    <button id="switchToOtp" class="btn btn-outline btn-block">
+                        <i class="fas fa-mobile-alt"></i> Verification Code
+                    </button>
+                    <div id="otpFallbackArea" class="hidden" style="margin-top:1rem;">
+                        <div class="otp-grid" id="otpInputs">
+                            <input type="text" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                            <input type="text" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                            <input type="text" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                            <input type="text" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                            <input type="text" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                            <input type="text" maxlength="1" pattern="[0-9]" inputmode="numeric">
                         </div>
-                    </div>
-                </div>
-
-                <!-- Monitoring Grid -->
-                <div class="monitoring-grid">
-                    <div class="monitor-item">
-                        <div class="monitor-icon green">
-                            <i class="fas fa-user-check"></i>
-                        </div>
-                        <h4>Behavioral Biometrics</h4>
-                        <p>Typing speed, swipe patterns, touch rhythm</p>
-                        <span class="monitor-status active">✓ Monitoring</span>
-                    </div>
-                    <div class="monitor-item">
-                        <div class="monitor-icon green">
-                            <i class="fas fa-map-pin"></i>
-                        </div>
-                        <h4>IP Trust Score</h4>
-                        <p>Location verification, whitelist status</p>
-                        <span class="monitor-status active">✓ Verified</span>
-                    </div>
-                    <div class="monitor-item">
-                        <div class="monitor-icon green">
-                            <i class="fas fa-microchip"></i>
-                        </div>
-                        <h4>Device Known</h4>
-                        <p>Fingerprint: fp_a1b2c3d4e5f6g7...</p>
-                        <span class="monitor-status active">✓ Trusted</span>
-                    </div>
-                    <div class="monitor-item">
-                        <div class="monitor-icon warning">
-                            <i class="fas fa-shield-halved"></i>
-                        </div>
-                        <h4>VPN Detection</h4>
-                        <p>No VPN detected</p>
-                        <span class="monitor-status warning">○ Inactive</span>
-                    </div>
-                </div>
-
-                <!-- Two Column Layout -->
-                <div class="dashboard-grid">
-                    <!-- Left: Trusted Devices -->
-                    <div class="card devices-card">
-                        <div class="card-header">
-                            <h3><i class="fas fa-laptop"></i> Trusted Devices</h3>
-                            <button class="btn-outline-sm">
-                                <i class="fas fa-plus"></i> Add Device
-                            </button>
-                        </div>
-                        <div class="device-list">
-                            <!-- Device A -->
-                            <div class="device-item current">
-                                <div class="device-icon">
-                                    <i class="fas fa-laptop"></i>
-                                </div>
-                                <div class="device-info">
-                                    <div class="device-name">
-                                        <span>Laptop A</span>
-                                        <span class="device-badge current">Current</span>
-                                    </div>
-                                    <p class="device-fingerprint">fp_a1b2c3d4e5f6g7...</p>
-                                    <p class="device-last">Last used: 2 minutes ago</p>
-                                </div>
-                                <div class="device-status-dot active"></div>
-                            </div>
-
-                            <!-- Device B -->
-                            <div class="device-item">
-                                <div class="device-icon">
-                                    <i class="fas fa-laptop"></i>
-                                </div>
-                                <div class="device-info">
-                                    <div class="device-name">
-                                        <span>Laptop B</span>
-                                        <span class="device-badge inactive">Inactive</span>
-                                    </div>
-                                    <p class="device-fingerprint">fp_x7y8z9a0b1c2d3...</p>
-                                    <p class="device-last">Last used: 2 hours ago</p>
-                                </div>
-                                <div class="device-status-dot inactive"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Right: Security Health -->
-                    <div class="card security-card">
-                        <div class="card-header">
-                            <h3><i class="fas fa-chart-line"></i> Security Health</h3>
-                        </div>
-                        <div class="security-factors">
-                            <div class="factor-item">
-                                <span>IP Whitelist</span>
-                                <span class="factor-status success"><i class="fas fa-check-circle"></i> Verified</span>
-                            </div>
-                            <div class="factor-item">
-                                <span>Device Known</span>
-                                <span class="factor-status success"><i class="fas fa-check-circle"></i> Verified</span>
-                            </div>
-                            <div class="factor-item">
-                                <span>Geolocation Match</span>
-                                <span class="factor-status success"><i class="fas fa-check-circle"></i> Verified</span>
-                            </div>
-                            <div class="factor-item">
-                                <span>Behavior Pattern</span>
-                                <span class="factor-status warning"><i class="fas fa-exclamation-triangle"></i> Review</span>
-                            </div>
-                        </div>
-
-                        <!-- AI Info -->
-                        <div class="ai-info">
-                            <i class="fas fa-robot"></i>
-                            <span>AI Risk Engine: Isolation Forest v2.4</span>
-                        </div>
-                    </div>
-
-                    <!-- Security Alerts Preview -->
-                    <div class="card alerts-card full-width">
-                        <div class="card-header">
-                            <h3><i class="fas fa-bell"></i> Recent Security Alerts</h3>
-                            <button class="btn-outline-sm">View All</button>
-                        </div>
-                        <div class="alert-list">
-                            <div class="alert-item high">
-                                <div class="alert-icon"><i class="fas fa-triangle-exclamation"></i></div>
-                                <div class="alert-content">
-                                    <p class="alert-title">Suspicious Login Attempt</p>
-                                    <p class="alert-desc">Unknown IP address detected • 10 min ago</p>
-                                </div>
-                                <span class="alert-badge high">85% Risk</span>
-                            </div>
-                            <div class="alert-item medium">
-                                <div class="alert-icon"><i class="fas fa-circle-exclamation"></i></div>
-                                <div class="alert-content">
-                                    <p class="alert-title">New Device Added</p>
-                                    <p class="alert-desc">Chrome on Windows • 30 min ago</p>
-                                </div>
-                                <span class="alert-badge medium">45% Risk</span>
-                            </div>
-                            <div class="alert-item low">
-                                <div class="alert-icon"><i class="fas fa-circle-check"></i></div>
-                                <div class="alert-content">
-                                    <p class="alert-title">Successful Login</p>
-                                    <p class="alert-desc">Trusted device • 2 hours ago</p>
-                                </div>
-                                <span class="alert-badge low">12% Risk</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Global Logout -->
-                    <div class="card danger-card full-width">
-                        <div class="danger-content">
-                            <div class="danger-icon">
-                                <i class="fas fa-triangle-exclamation"></i>
-                            </div>
-                            <div class="danger-text">
-                                <h4>Pause All Sessions</h4>
-                                <p>This will logout all devices instantly. Are you sure?</p>
-                            </div>
-                            <button class="btn-danger">
-                                <i class="fas fa-power-off"></i> Execute Global Logout
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ================================ -->
-            <!-- TAB CONTENT: DEVICES -->
-            <!-- ================================ -->
-            <section id="tab-devices" class="tab-content">
-                <div class="placeholder-content">
-                    <i class="fas fa-laptop-code placeholder-icon"></i>
-                    <h2>Trusted Devices</h2>
-                    <p>Manage your trusted devices and fingerprints</p>
-                    <button class="btn-primary"><i class="fas fa-plus"></i> Pair New Device</button>
-                </div>
-            </section>
-
-            <!-- ================================ -->
-            <!-- TAB CONTENT: ALERTS -->
-            <!-- ================================ -->
-            <section id="tab-alerts" class="tab-content">
-                <div class="placeholder-content">
-                    <i class="fas fa-bell placeholder-icon"></i>
-                    <h2>Security Alerts</h2>
-                    <p>View all AI-triggered security alerts</p>
-                </div>
-            </section>
-
-            <!-- ================================ -->
-            <!-- TAB CONTENT: HISTORY -->
-            <!-- ================================ -->
-            <section id="tab-history" class="tab-content">
-                <div class="placeholder-content">
-                    <i class="fas fa-clock-rotate-left placeholder-icon"></i>
-                    <h2>Login History</h2>
-                    <p>Audit trail of all authentication events</p>
-                    <button class="btn-outline"><i class="fas fa-download"></i> Export CSV</button>
-                </div>
-            </section>
-
-            <!-- ================================ -->
-            <!-- TAB CONTENT: RECOVERY -->
-            <!-- ================================ -->
-            <section id="tab-recovery" class="tab-content">
-                <div class="placeholder-content">
-                    <i class="fas fa-life-ring placeholder-icon"></i>
-                    <h2>Account Recovery</h2>
-                    <p>Recover your account via trusted methods</p>
-                    <div class="recovery-options">
-                        <button class="recovery-option">
-                            <i class="fas fa-university"></i>
-                            <span>Bank Branch Verification</span>
+                        <button id="verifyOtpBtn" class="btn btn-primary btn-block" style="margin-top:0.5rem;">
+                            <i class="fas fa-check"></i> Verify Code
                         </button>
-                        <button class="recovery-option">
-                            <i class="fas fa-mobile-screen-button"></i>
-                            <span>Recovery Device</span>
-                        </button>
-                        <button class="recovery-option">
-                            <i class="fas fa-key"></i>
-                            <span>Hardware Security Key</span>
-                        </button>
+                        <button id="resendOtp" class="btn btn-ghost btn-block" style="margin-top:0.5rem; font-size:0.85rem;">Resend code</button>
                     </div>
+                    <div id="loginError" class="alert alert-danger hidden"></div>
                 </div>
-            </section>
-
-        </main>
-
-        <!-- ===================================== -->
-        <!-- FOOTER STATUS BAR -->
-        <!-- ===================================== -->
-        <footer class="footer">
-            <div class="footer-left">
-                <span>VaultID</span>
-                <span class="footer-divider">•</span>
-                <span>AI: Isolation Forest v2.4</span>
-                <span class="footer-divider">•</span>
-                <span>Audit: Immutable PostgreSQL</span>
+                <div class="auth-footer">
+                    <p class="text-muted">Don't have an account? <span class="link" id="goToRegister">Sign up</span></p>
+                </div>
             </div>
-            <div class="footer-right">
-                <span class="footer-status">
-                    <span class="status-dot active"></span>
-                    All Systems Secure
-                </span>
+        </div>
+
+        <!-- REGISTER PAGE -->
+        <div id="page-register" class="auth-container hidden">
+            <div class="auth-card" style="max-width:520px;">
+                <div class="auth-header">
+                    <div class="logo">
+                        <i class="fas fa-shield-alt" style="color:#1a237e; font-size:2rem;"></i>
+                        <span style="font-weight:700; font-size:1.5rem; color:#1a237e;">VaultID</span>
+                    </div>
+                    <h1 class="auth-title">Create your account</h1>
+                    <p class="auth-subtitle">Get started with passwordless banking security</p>
+                </div>
+                <div class="auth-body">
+                    <div class="steps">
+                        <div class="step active">1</div>
+                        <div class="step-line"></div>
+                        <div class="step">2</div>
+                        <div class="step-line"></div>
+                        <div class="step">3</div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="input-group">
+                            <label for="regFirstName">First name</label>
+                            <div class="input-wrapper">
+                                <i class="fas fa-user input-icon"></i>
+                                <input id="regFirstName" placeholder="First name">
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="regLastName">Last name</label>
+                            <div class="input-wrapper">
+                                <i class="fas fa-user input-icon"></i>
+                                <input id="regLastName" placeholder="Last name">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="regMobile">Phone number</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-phone input-icon"></i>
+                            <input id="regMobile" placeholder="+1 234 567 890">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="regEmail">Email address</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-envelope input-icon"></i>
+                            <input id="regEmail" placeholder="you@example.com" type="email">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="regPassword">Password</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-lock input-icon"></i>
+                            <input id="regPassword" type="password" placeholder="Min 8 characters">
+                        </div>
+                        <div class="password-hint">Must be at least 8 characters</div>
+                    </div>
+                    <div class="input-group">
+                        <label for="regConfirm">Confirm password</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-check-circle input-icon"></i>
+                            <input id="regConfirm" type="password" placeholder="Confirm your password">
+                        </div>
+                    </div>
+                    <button id="registerBtn" class="btn btn-primary btn-block">
+                        <i class="fas fa-user-plus"></i> Create Account
+                    </button>
+                    <div id="regError" class="alert alert-danger hidden"></div>
+                </div>
+                <div class="auth-footer">
+                    <p class="text-muted">Already have an account? <span class="link" id="goToLogin">Sign in</span></p>
+                </div>
             </div>
-        </footer>
+        </div>
 
-    </div>
+        <!-- DASHBOARD -->
+        <div id="page-dashboard" class="dashboard-container hidden">
+            <aside class="dashboard-sidebar">
+                <div class="sidebar-brand">
+                    <i class="fas fa-shield-alt" style="color:#ffffff; font-size:1.5rem;"></i>
+                    <span>VaultID</span>
+                </div>
+                <nav class="sidebar-nav">
+                    <button class="sidebar-nav-item active" data-tab="tabOverview"><i class="fas fa-home"></i><span>Overview</span></button>
+                    <button class="sidebar-nav-item" data-tab="tabAccounts"><i class="fas fa-wallet"></i><span>Accounts</span></button>
+                    <button class="sidebar-nav-item" data-tab="tabDevices"><i class="fas fa-mobile-alt"></i><span>Devices</span></button>
+                    <button class="sidebar-nav-item" data-tab="tabSecurity"><i class="fas fa-shield"></i><span>Security</span><span id="alertBadge" class="badge badge-danger" style="display:none; margin-left:auto;"></span></button>
+                    <button class="sidebar-nav-item" data-tab="tabActivity"><i class="fas fa-clock"></i><span>Activity</span></button>
+                </nav>
+                <div class="sidebar-footer">
+                    <div class="user-profile">
+                        <div class="user-avatar" id="userAvatar">U</div>
+                        <div class="user-info">
+                            <div class="user-name" id="userName">User Name</div>
+                            <div class="user-email" id="userEmail">user@example.com</div>
+                        </div>
+                    </div>
+                    <button id="logoutBtn" class="btn btn-outline-light btn-sm" style="width:100%; margin-top:0.5rem; color:#ffffff; border-color:rgba(255,255,255,0.3);">
+                        <i class="fas fa-sign-out-alt"></i> Sign Out
+                    </button>
+                </div>
+            </aside>
 
-    <!-- ===================================== -->
-    <!-- MODAL -->
-    <!-- ===================================== -->
-    <div id="detailsModal" class="modal">
-        <div class="modal-content">
-            <button id="closeModal" class="close-btn">
-                <i class="fas fa-times"></i>
-            </button>
-            <h2 id="modalTitle">Details</h2>
-            <div id="modalBody"></div>
+            <main class="dashboard-main">
+                <header class="dashboard-header">
+                    <div class="header-left"><h1 class="page-title" id="pageTitle">Overview</h1></div>
+                    <div class="header-right">
+                        <span class="status-badge"><span class="status-dot"></span><span>Secure</span></span>
+                        <span id="sessionTimer" class="session-time">15:00</span>
+                    </div>
+                </header>
+                <div class="dashboard-content">
+
+                    <!-- OVERVIEW TAB -->
+                    <section id="tabOverview" class="tab-pane active">
+                        <div class="welcome-section">
+                            <div><h2>Welcome back, <span id="userNameDisplay">User</span> 👋</h2><p class="text-muted">Your accounts are secure and protected</p></div>
+                            <div class="status-badge status-badge-success"><i class="fas fa-check-circle"></i> Verified</div>
+                        </div>
+
+                        <div class="account-grid">
+                            <div class="account-card account-card-primary">
+                                <div class="account-card-header"><span class="account-label">Account Name</span><span class="account-badge">Primary</span></div>
+                                <div class="account-balance">$0.00</div>
+                                <div class="account-number">•••• 0000</div>
+                            </div>
+                            <div class="account-card account-card-savings">
+                                <div class="account-card-header"><span class="account-label">Savings</span><span class="account-badge">Savings</span></div>
+                                <div class="account-balance">$0.00</div>
+                                <div class="account-number">•••• 0000</div>
+                            </div>
+                        </div>
+
+                        <div class="quick-actions">
+                            <button class="quick-action-btn" onclick="handleQuickAction('Send')"><i class="fas fa-arrow-up"></i><span>Send</span></button>
+                            <button class="quick-action-btn" onclick="handleQuickAction('Receive')"><i class="fas fa-arrow-down"></i><span>Receive</span></button>
+                            <button class="quick-action-btn" onclick="handleQuickAction('Transfer')"><i class="fas fa-exchange-alt"></i><span>Transfer</span></button>
+                            <button class="quick-action-btn" onclick="handleQuickAction('Statements')"><i class="fas fa-file-invoice"></i><span>Statements</span></button>
+                        </div>
+
+                        <div class="security-status">
+                            <h3><i class="fas fa-shield-alt" style="color:#1a237e;"></i> Security Status</h3>
+                            <div class="security-grid">
+                                <div class="security-item"><div class="security-label">Device Trust</div><div class="security-value success">—</div></div>
+                                <div class="security-item"><div class="security-label">Account Status</div><div class="security-value success">—</div></div>
+                                <div class="security-item"><div class="security-label">Security Level</div><div class="security-value primary">—</div></div>
+                            </div>
+                        </div>
+
+                        <div class="activity-section">
+                            <div class="section-header"><h3>Recent Activity</h3><button class="btn btn-ghost btn-sm" onclick="switchTab('tabActivity')">View All →</button></div>
+                            <div id="activityPreview" class="activity-list"></div>
+                        </div>
+                    </section>
+
+                    <!-- ACCOUNTS TAB -->
+                    <section id="tabAccounts" class="tab-pane hidden">
+                        <h2 class="section-title">Your Accounts</h2>
+                        <div class="account-grid" style="grid-template-columns:repeat(auto-fill, minmax(250px, 1fr));">
+                            <div class="account-card account-card-primary">
+                                <div class="account-card-header"><span class="account-label">Account Name</span><span class="account-badge">Primary</span></div>
+                                <div class="account-balance">$0.00</div>
+                                <div class="account-number">•••• 0000</div>
+                                <div class="account-actions"><span class="badge badge-success">Active</span></div>
+                            </div>
+                            <div class="account-card account-card-savings">
+                                <div class="account-card-header"><span class="account-label">Savings</span><span class="account-badge">Savings</span></div>
+                                <div class="account-balance">$0.00</div>
+                                <div class="account-number">•••• 0000</div>
+                                <div class="account-actions"><span class="badge badge-success">Active</span></div>
+                            </div>
+                            <div class="account-card account-card-investment">
+                                <div class="account-card-header"><span class="account-label">Investment</span><span class="account-badge">Invest</span></div>
+                                <div class="account-balance">$0.00</div>
+                                <div class="account-number">•••• 0000</div>
+                                <div class="account-actions"><span class="badge badge-success">Active</span></div>
+                            </div>
+                            <div class="account-card account-card-add" onclick="showToast('Add account feature coming soon', 'info')">
+                                <div class="add-account-content"><i class="fas fa-plus-circle"></i><span>Add Account</span></div>
+                            </div>
+                        </div>
+
+                        <div class="section-header" style="margin-top:1.5rem;">
+                            <h3>Transaction History</h3>
+                            <span class="text-muted" style="font-size:0.8rem;">Recent transactions</span>
+                        </div>
+                        <div id="transactionHistory" class="activity-list"></div>
+
+                        <div class="section-header" style="margin-top:1.5rem;">
+                            <h3>Pending Transactions</h3>
+                            <span class="badge badge-warning">Requires Approval</span>
+                        </div>
+                        <div id="pendingTransactions"></div>
+                    </section>
+
+                    <!-- DEVICES TAB -->
+                    <section id="tabDevices" class="tab-pane hidden">
+                        <div class="section-header">
+                            <div><h2 class="section-title">Devices</h2><p class="text-muted">Manage your trusted devices and security keys</p></div>
+                            <button id="refreshDevices" class="btn btn-secondary btn-sm"><i class="fas fa-sync"></i> Refresh</button>
+                        </div>
+                        <div id="deviceList" class="device-list"></div>
+                    </section>
+
+                    <!-- SECURITY TAB -->
+                    <section id="tabSecurity" class="tab-pane hidden">
+                        <div class="section-header">
+                            <div><h2 class="section-title">Security Alerts</h2><p class="text-muted">Real-time security notifications and alerts</p></div>
+                            <div style="display:flex; gap:0.5rem;">
+                                <select id="alertFilter" class="filter-select">
+                                    <option value="all">All Alerts</option>
+                                    <option value="High">High Priority</option>
+                                    <option value="Medium">Medium Priority</option>
+                                    <option value="Low">Low Priority</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="security-status" style="margin-bottom:1rem;">
+                            <h3><i class="fas fa-shield-alt" style="color:#1a237e;"></i> Security Summary</h3>
+                            <div class="security-grid">
+                                <div class="security-item"><div class="security-label">Device Trust</div><div class="security-value success">—</div></div>
+                                <div class="security-item"><div class="security-label">Account Status</div><div class="security-value success">—</div></div>
+                                <div class="security-item"><div class="security-label">Security Level</div><div class="security-value primary">—</div></div>
+                            </div>
+                        </div>
+
+                        <div class="section-header"><h3>Security Events</h3><span class="text-muted" style="font-size:0.8rem;">Recent security activity</span></div>
+                        <div id="securityEventsList" class="activity-list"></div>
+
+                        <div class="section-header" style="margin-top:1.5rem;"><h3>All Alerts</h3><span class="text-muted" style="font-size:0.8rem;">Complete alert history</span></div>
+                        <div id="alertList" class="alert-list"></div>
+                    </section>
+
+                    <!-- ACTIVITY TAB -->
+                    <section id="tabActivity" class="tab-pane hidden">
+                        <div class="section-header">
+                            <div><h2 class="section-title">Account Activity</h2><p class="text-muted">Recent actions on your accounts</p></div>
+                            <button id="exportActivity" class="btn btn-secondary btn-sm"><i class="fas fa-download"></i> Export</button>
+                        </div>
+                        <div class="table-container">
+                            <table class="activity-table">
+                                <thead><tr><th>Date & Time</th><th>Action</th><th>Device</th><th>Status</th></tr></thead>
+                                <tbody id="activityBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                </div>
+            </main>
         </div>
     </div>
-
-    <!-- ===================================== -->
-    <!-- TOAST CONTAINER -->
-    <!-- ===================================== -->
-    <div id="toastContainer" class="toast-container"></div>
 
     <script src="script.js"></script>
 </body>
 </html>
+<!-- Changes made-->

@@ -1,499 +1,341 @@
-/* ========================================================= */
-/* VAULTID - Microsoft Authenticator Inspired Script */
-/* ========================================================= */
+/**
+ * VaultID - User Portal
+ * TEMPLATE VERSION – No Synthetic Data
+ * All data arrays are empty – ready for real data
+ */
 
-(function() {
-    'use strict';
+console.log('🚀 VaultID Loading... (Template Mode)');
 
-    // =========================================================
-    // PART 1: DOM REFERENCES & STATE
-    // =========================================================
+// ===== STATE =====
+const State = {
+    user: { email: '', firstName: '', lastName: '' },
+    accessToken: null,
+    alerts: [],
+    devices: [],
+    activity: [],
+    transactionHistory: [],
+    pendingTransactions: [],
+    securityEvents: [],
+    currentTab: 'overview'
+};
 
-    const Elements = {
-        // Navigation
-        navTabs: document.querySelectorAll('.nav-tab'),
-        tabContents: document.querySelectorAll('.tab-content'),
+// ===== NO MOCK DATA – ALL ARRAYS EMPTY =====
+// Your friends can populate these arrays with real data.
 
-        // Modal
-        modal: document.getElementById('detailsModal'),
-        modalTitle: document.getElementById('modalTitle'),
-        modalBody: document.getElementById('modalBody'),
-        closeModal: document.getElementById('closeModal'),
-
-        // Toast
-        toastContainer: document.getElementById('toastContainer'),
-
-        // Time display
-        currentTime: document.getElementById('currentTime'),
-
-        // Logout
-        logoutBtn: document.querySelector('.logout-btn'),
-    };
-
-    const AppState = {
-        currentTab: 'main',
-        alerts: [
-            { title: 'Suspicious Login Attempt', desc: 'Unknown IP address detected', time: '10 min ago', risk: 85, severity: 'high' },
-            { title: 'New Device Added', desc: 'Chrome on Windows', time: '30 min ago', risk: 45, severity: 'medium' },
-            { title: 'Successful Login', desc: 'Trusted device', time: '2 hours ago', risk: 12, severity: 'low' }
-        ]
-    };
-
-    // =========================================================
-    // PART 2: TIME UPDATER
-    // =========================================================
-
-    function updateTime() {
-        if (!Elements.currentTime) return;
-        const now = new Date();
-        const options = { 
-            month: 'short', 
-            day: 'numeric', 
-            year: 'numeric',
-            hour: '2-digit', 
-            minute: '2-digit' 
-        };
-        Elements.currentTime.textContent = now.toLocaleDateString('en-US', options);
+// ===== RENDER FUNCTIONS =====
+function renderDevices() {
+    const container = document.getElementById('deviceList');
+    if (!container) return;
+    if (State.devices.length === 0) {
+        container.innerHTML = '<p class="text-muted">No devices connected</p>';
+        return;
     }
-
-    // =========================================================
-    // PART 3: TAB SWITCHING
-    // =========================================================
-
-    function switchTab(tabId) {
-        // Update nav tabs
-        Elements.navTabs.forEach(tab => {
-            const tabName = tab.dataset.tab;
-            if (tabName === tabId) {
-                tab.classList.add('active');
-            } else {
-                tab.classList.remove('active');
-            }
-        });
-
-        // Update content
-        Elements.tabContents.forEach(content => {
-            const contentId = content.id;
-            if (contentId === `tab-${tabId}`) {
-                content.classList.add('active-tab');
-            } else {
-                content.classList.remove('active-tab');
-            }
-        });
-
-        AppState.currentTab = tabId;
-    }
-
-    // =========================================================
-    // PART 4: MODAL SYSTEM
-    // =========================================================
-
-    function showModal(title, content) {
-        if (!Elements.modal || !Elements.modalTitle || !Elements.modalBody) return;
-        Elements.modalTitle.textContent = title;
-        Elements.modalBody.innerHTML = content;
-        Elements.modal.classList.add('show');
-        document.body.style.overflow = 'hidden';
-    }
-
-    function closeModal() {
-        if (!Elements.modal) return;
-        Elements.modal.classList.remove('show');
-        document.body.style.overflow = '';
-    }
-
-    // =========================================================
-    // PART 5: TOAST SYSTEM
-    // =========================================================
-
-    function showToast(message, type = 'info', duration = 4000) {
-        if (!Elements.toastContainer) return;
-
-        const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
-
-        const icons = {
-            success: 'fa-circle-check',
-            error: 'fa-circle-xmark',
-            warning: 'fa-triangle-exclamation',
-            info: 'fa-circle-info'
-        };
-
-        toast.innerHTML = `
-            <i class="fas ${icons[type] || icons.info}"></i>
-            <span>${message}</span>
-        `;
-
-        Elements.toastContainer.appendChild(toast);
-
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateX(40px)';
-            toast.style.transition = '0.3s ease';
-            setTimeout(() => {
-                toast.remove();
-            }, 300);
-        }, duration);
-    }
-
-    // =========================================================
-    // PART 6: GLOBAL LOGOUT
-    // =========================================================
-
-    function handleGlobalLogout() {
-        showModal(
-            'Pause All Sessions',
-            `
-            <div style="text-align: center; padding: 20px 0;">
-                <div style="font-size: 56px; color: #ef4444; margin-bottom: 16px;">
-                    <i class="fas fa-triangle-exclamation"></i>
-                </div>
-                <h3 style="color: #dc2626; font-size: 20px; margin-bottom: 8px;">Confirm Global Logout</h3>
-                <p style="color: #64748b; margin-bottom: 24px;">
-                    This will immediately logout all devices and pause all active sessions.
-                    <br><strong style="color: #1e293b;">Are you sure?</strong>
-                </p>
-                <div style="display: flex; gap: 12px; justify-content: center;">
-                    <button onclick="closeModal()" style="
-                        padding: 10px 28px;
-                        border-radius: 12px;
-                        border: 2px solid #e2e8f0;
-                        background: transparent;
-                        font-weight: 600;
-                        cursor: pointer;
-                        transition: 0.25s;
-                    ">Cancel</button>
-                    <button onclick="confirmLogout()" style="
-                        padding: 10px 28px;
-                        border-radius: 12px;
-                        background: #ef4444;
-                        color: white;
-                        font-weight: 600;
-                        border: none;
-                        cursor: pointer;
-                        transition: 0.25s;
-                    ">Yes, Logout All</button>
+    container.innerHTML = State.devices.map(d => `
+        <div class="device-card">
+            <div class="device-info">
+                <div class="device-icon"><i class="fas fa-${d.type === 'mobile' ? 'mobile-alt' : d.type === 'tablet' ? 'tablet' : 'laptop'}"></i></div>
+                <div>
+                    <div class="device-name">${d.name}</div>
+                    <div class="device-location">${d.location} · ${d.os} · ${d.browser}</div>
+                    <div class="device-location" style="font-size:0.7rem;color:#94a3b8;">IP: ${d.ip}</div>
                 </div>
             </div>
-            `
-        );
+            <div class="device-status">
+                ${d.current ? '<span class="badge badge-success">Current</span>' : ''}
+                ${d.trusted ? '<span class="badge badge-success">✓ Trusted</span>' : '<span class="badge badge-warning">⚠ Untrusted</span>'}
+                <span style="font-size:0.7rem;color:#94a3b8;">${getRelativeTime(d.lastUsed)}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderAlerts() {
+    const container = document.getElementById('alertList');
+    if (!container) return;
+    const filter = document.getElementById('alertFilter')?.value || 'all';
+    let filtered = State.alerts.filter(a => filter === 'all' || a.severity === filter);
+    filtered.sort((a, b) => b.timestamp - a.timestamp);
+    if (filtered.length === 0) {
+        container.innerHTML = '<p class="text-muted">No security alerts</p>';
+        return;
     }
+    container.innerHTML = filtered.map(a => `
+        <div class="alert-item ${!a.read ? 'unread' : ''}">
+            <div class="alert-header">
+                <span class="alert-title">
+                    <span class="badge ${a.severity === 'High' ? 'badge-danger' : a.severity === 'Medium' ? 'badge-warning' : 'badge-success'}">${a.severity}</span>
+                    ${a.title} ${!a.read ? '<span class="badge badge-primary">New</span>' : ''}
+                </span>
+                <span class="alert-time">${getRelativeTime(a.timestamp)}</span>
+            </div>
+            <div class="alert-description">${a.description}</div>
+            <div style="margin-top:0.3rem;font-size:0.75rem;color:#64748b;">
+                <span class="badge badge-secondary">${a.category}</span>
+                <span>Action: ${a.action}</span>
+            </div>
+        </div>
+    `).join('');
+    // Update badge
+    const badge = document.getElementById('alertBadge');
+    const unread = State.alerts.filter(a => !a.read).length;
+    if (badge) { badge.textContent = unread; badge.style.display = unread > 0 ? 'inline-flex' : 'none'; }
+}
 
-    function confirmLogout() {
-        closeModal();
-        showToast('🔒 All sessions paused successfully', 'success');
-        // Update UI to reflect paused state
-        document.querySelector('.session-status .status-dot')?.classList.remove('active');
-        document.querySelector('.session-title').textContent = 'Session Paused';
-        document.querySelector('.session-title').style.opacity = '0.7';
-        document.querySelector('.risk-number').textContent = '0%';
-        showToast('🔔 Logout notification sent to all devices', 'info');
+function renderActivity() {
+    const container = document.getElementById('activityBody');
+    if (!container) return;
+    const activities = State.activity.sort((a, b) => b.date - a.date);
+    if (activities.length === 0) {
+        container.innerHTML = '<tr><td colspan="4" style="padding:1rem;text-align:center;color:#94a3b8;">No activity yet</td></tr>';
+        return;
     }
+    container.innerHTML = activities.map(e => `
+        <tr>
+            <td style="font-size:0.75rem;">${e.date.toLocaleString()}</td>
+            <td>${e.action}${e.amount ? ` <span style="color:${e.amount > 0 ? '#22c55e' : '#ef4444'};font-weight:600;">${e.amount > 0 ? '+' : ''}$${Math.abs(e.amount).toFixed(2)}</span>` : ''}</td>
+            <td style="font-size:0.75rem;color:#64748b;">${e.device}</td>
+            <td><span class="badge ${e.status === 'Success' ? 'badge-success' : 'badge-danger'}">${e.status}</span></td>
+        </tr>
+    `).join('');
+}
 
-    // Expose for inline onclick
-    window.closeModal = closeModal;
-    window.confirmLogout = confirmLogout;
-
-    // =========================================================
-    // PART 7: ALERT INTERACTIONS
-    // =========================================================
-
-    function setupAlertInteractions() {
-        document.querySelectorAll('.alert-item').forEach(item => {
-            item.addEventListener('click', function() {
-                const title = this.querySelector('.alert-title')?.textContent || 'Alert';
-                const desc = this.querySelector('.alert-desc')?.textContent || '';
-                const badge = this.querySelector('.alert-badge')?.textContent || '';
-
-                showModal(
-                    `Security Alert: ${title}`,
-                    `
-                    <div style="margin-bottom: 16px;">
-                        <div style="font-size: 40px; text-align: center; margin-bottom: 12px;">
-                            ${this.classList.contains('high') ? '🔴' : 
-                              this.classList.contains('medium') ? '🟡' : '🟢'}
-                        </div>
-                        <p><strong>Description:</strong> ${desc}</p>
-                        <p><strong>Risk Score:</strong> ${badge}</p>
-                        <p><strong>Time:</strong> ${this.querySelector('.alert-desc')?.textContent.split('•')[1] || 'Unknown'}</p>
-                        <div style="
-                            margin-top: 16px;
-                            padding: 12px 16px;
-                            background: #f8fafc;
-                            border-radius: 8px;
-                            border-left: 4px solid #2878f3;
-                        ">
-                            <strong>AI Analysis:</strong> This alert was triggered by the Isolation Forest model.
-                            ${this.classList.contains('high') ? 'High risk activity detected.' : 
-                              this.classList.contains('medium') ? 'Medium risk activity. Review recommended.' : 
-                              'Low risk activity. Standard monitoring.'}
-                        </div>
+function renderTransactions() {
+    const historyContainer = document.getElementById('transactionHistory');
+    if (historyContainer) {
+        if (State.transactionHistory.length === 0) {
+            historyContainer.innerHTML = '<p class="text-muted">No transactions</p>';
+        } else {
+            historyContainer.innerHTML = State.transactionHistory.map(tx => `
+                <div class="activity-item" style="border-left-color:${tx.amount > 0 ? '#22c55e' : '#ef4444'};">
+                    <div class="activity-info">
+                        <div class="activity-action"><span style="color:${tx.amount > 0 ? '#22c55e' : '#ef4444'};">${tx.type} ${tx.amount > 0 ? '↓' : '↑'}</span> ${tx.description}</div>
+                        <div class="activity-time">${tx.counterparty} · ${tx.date.toLocaleString()}</div>
                     </div>
-                    `
-                );
-            });
-        });
-    }
-
-    // =========================================================
-    // PART 8: DEVICE INTERACTIONS
-    // =========================================================
-
-    function setupDeviceInteractions() {
-        document.querySelectorAll('.device-item').forEach(item => {
-            item.addEventListener('click', function() {
-                const name = this.querySelector('.device-name span')?.textContent || 'Device';
-                const fingerprint = this.querySelector('.device-fingerprint')?.textContent || '';
-                const lastUsed = this.querySelector('.device-last')?.textContent || '';
-
-                showModal(
-                    `Device: ${name}`,
-                    `
-                    <div style="margin-bottom: 16px;">
-                        <div style="font-size: 40px; text-align: center; margin-bottom: 12px;">
-                            ${this.classList.contains('current') ? '🟢' : '⚪'}
-                        </div>
-                        <p><strong>Device Name:</strong> ${name}</p>
-                        <p><strong>Fingerprint:</strong> <code style="background: #f1f5f9; padding: 2px 8px; border-radius: 4px;">${fingerprint}</code></p>
-                        <p><strong>Status:</strong> ${this.classList.contains('current') ? 'Active' : 'Inactive'}</p>
-                        <p><strong>Last Used:</strong> ${lastUsed}</p>
-                        <div style="
-                            margin-top: 16px;
-                            padding: 12px 16px;
-                            background: #f8fafc;
-                            border-radius: 8px;
-                            border-left: 4px solid #2878f3;
-                        ">
-                            <strong>AI Trust Score:</strong> ${this.classList.contains('current') ? '95%' : '78%'}
-                            <br>
-                            <small style="color: #64748b;">Based on device fingerprint, IP consistency, and behavioral patterns</small>
-                        </div>
+                    <div style="display:flex;align-items:center;gap:0.5rem;">
+                        <span style="font-weight:600;color:${tx.amount > 0 ? '#22c55e' : '#ef4444'};">${tx.amount > 0 ? '+' : ''}$${Math.abs(tx.amount).toFixed(2)}</span>
+                        <span class="badge ${tx.status === 'Completed' ? 'badge-success' : 'badge-warning'}">${tx.status}</span>
                     </div>
-                    `
-                );
-            });
-        });
-    }
-
-    // =========================================================
-    // PART 9: RECOVERY OPTIONS
-    // =========================================================
-
-    function setupRecoveryInteractions() {
-        document.querySelectorAll('.recovery-option').forEach(option => {
-            option.addEventListener('click', function() {
-                const name = this.querySelector('span')?.textContent || 'Recovery Method';
-
-                const details = {
-                    'Bank Branch Verification': 'Visit your bank branch with valid ID proof. Branch manager will verify your identity and initiate the recovery process.',
-                    'Recovery Device': 'Use your pre-registered backup device to receive a recovery code. This device must have been previously verified.',
-                    'Hardware Security Key': 'Insert your registered hardware security key (YubiKey or similar). This provides cryptographic proof of identity.'
-                };
-
-                showModal(
-                    `Recovery: ${name}`,
-                    `
-                    <div style="margin-bottom: 16px;">
-                        <div style="font-size: 48px; text-align: center; margin-bottom: 12px;">
-                            ${this.querySelector('i')?.outerHTML || '🔐'}
-                        </div>
-                        <p><strong>Method:</strong> ${name}</p>
-                        <p style="margin-top: 8px;"><strong>Process:</strong></p>
-                        <p style="color: #475569;">${details[name] || 'Follow the standard recovery process.'}</p>
-                        <div style="
-                            margin-top: 16px;
-                            padding: 12px 16px;
-                            background: #fef3c7;
-                            border-radius: 8px;
-                            border-left: 4px solid #f59e0b;
-                        ">
-                            <strong>⚠️ Security Notice:</strong> Recovery requires additional verification and may take 24-48 hours for security reasons.
-                        </div>
-                    </div>
-                    `
-                );
-            });
-        });
-    }
-
-    // =========================================================
-    // PART 10: NAVIGATION SETUP
-    // =========================================================
-
-    function setupNavigation() {
-        Elements.navTabs.forEach(tab => {
-            tab.addEventListener('click', function() {
-                const tabId = this.dataset.tab;
-                if (tabId) {
-                    switchTab(tabId);
-                    showToast(`Switched to ${this.textContent.trim()}`, 'info', 1500);
-                }
-            });
-        });
-    }
-
-    // =========================================================
-    // PART 11: MODAL EVENTS
-    // =========================================================
-
-    function setupModalEvents() {
-        if (Elements.closeModal) {
-            Elements.closeModal.addEventListener('click', closeModal);
-        }
-
-        if (Elements.modal) {
-            Elements.modal.addEventListener('click', function(e) {
-                if (e.target === this) closeModal();
-            });
-        }
-
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeModal();
-        });
-    }
-
-    // =========================================================
-    // PART 12: LOGOUT HANDLER
-    // =========================================================
-
-    function setupLogoutHandler() {
-        if (Elements.logoutBtn) {
-            Elements.logoutBtn.addEventListener('click', handleGlobalLogout);
+                </div>
+            `).join('');
         }
     }
+    const pendingContainer = document.getElementById('pendingTransactions');
+    if (pendingContainer) {
+        if (State.pendingTransactions.length === 0) {
+            pendingContainer.innerHTML = '<p class="text-muted">No pending transactions</p>';
+        } else {
+            pendingContainer.innerHTML = State.pendingTransactions.map(tx => `
+                <div class="alert-item" style="border-left:3px solid #f59e0b;">
+                    <div class="alert-header">
+                        <span class="alert-title"><span class="badge badge-warning">Pending</span> ${tx.description}</span>
+                        <span style="font-weight:600;">$${tx.amount.toFixed(2)}</span>
+                    </div>
+                    <div class="alert-description">To: ${tx.counterparty} · Risk Score: ${tx.riskScore}% · ${tx.date.toLocaleString()}</div>
+                    <div style="margin-top:0.5rem;display:flex;gap:0.5rem;">
+                        <button class="btn btn-sm btn-success" onclick="approveTransaction(${tx.id})">Approve</button>
+                        <button class="btn btn-sm btn-danger" onclick="declineTransaction(${tx.id})">Decline</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+    }
+}
 
-    // =========================================================
-    // PART 13: SESSION STATUS UPDATER
-    // =========================================================
+function renderSecurityEvents() {
+    const container = document.getElementById('securityEventsList');
+    if (!container) return;
+    if (State.securityEvents.length === 0) {
+        container.innerHTML = '<p class="text-muted">No security events</p>';
+        return;
+    }
+    container.innerHTML = State.securityEvents.map(e => `
+        <div class="activity-item" style="border-left-color:${e.riskLevel === 'High' ? '#ef4444' : e.riskLevel === 'Medium' ? '#f59e0b' : '#22c55e'};">
+            <div class="activity-info">
+                <div class="activity-action">${e.event}</div>
+                <div class="activity-time">${e.method} · ${e.device} · ${e.location}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+                <span class="badge ${e.status === 'Success' ? 'badge-success' : 'badge-danger'}">${e.status}</span>
+                <span class="badge ${e.riskLevel === 'High' ? 'badge-danger' : e.riskLevel === 'Medium' ? 'badge-warning' : 'badge-success'}">${e.riskLevel}</span>
+                <span style="font-size:0.7rem;color:#94a3b8;">${getRelativeTime(e.date)}</span>
+            </div>
+        </div>
+    `).join('');
+}
 
-    function setupSessionUpdater() {
-        // Simulate session time remaining
-        let minutesRemaining = 15;
-        const sessionStatus = document.querySelector('.session-label');
-        const sessionTime = document.querySelector('.session-time span');
+function renderActivityPreview() {
+    const container = document.getElementById('activityPreview');
+    if (!container) return;
+    const recent = State.alerts.sort((a, b) => b.timestamp - a.timestamp).slice(0, 3);
+    if (recent.length === 0) {
+        container.innerHTML = '<p class="text-muted">No recent activity</p>';
+        return;
+    }
+    container.innerHTML = recent.map(a => `
+        <div class="activity-item" style="border-left-color:${a.severity === 'High' ? '#ef4444' : a.severity === 'Medium' ? '#f59e0b' : '#22c55e'};">
+            <div class="activity-info">
+                <div class="activity-action">${a.title}</div>
+                <div class="activity-time">${getRelativeTime(a.timestamp)}</div>
+            </div>
+            <span class="badge ${a.severity === 'High' ? 'badge-danger' : a.severity === 'Medium' ? 'badge-warning' : 'badge-success'}">${a.severity}</span>
+        </div>
+    `).join('');
+}
 
+// ===== HELPER FUNCTIONS =====
+function getRelativeTime(timestamp) {
+    const diff = Date.now() - timestamp;
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return `${seconds}s ago`;
+}
+
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const icons = { success: 'fa-check-circle', error: 'fa-exclamation-circle', warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i> ${message}`;
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.animation = 'slideOut 0.3s ease forwards'; setTimeout(() => toast.remove(), 300); }, 4000);
+}
+
+function handleQuickAction(action) { showToast(`${action} feature coming soon!`, 'info'); }
+function approveTransaction(id) {
+    const tx = State.pendingTransactions.find(t => t.id === id);
+    if (tx) { State.pendingTransactions = State.pendingTransactions.filter(t => t.id !== id); renderTransactions(); showToast('✅ Transaction approved', 'success'); }
+}
+function declineTransaction(id) {
+    State.pendingTransactions = State.pendingTransactions.filter(t => t.id !== id);
+    renderTransactions();
+    showToast('Transaction declined', 'warning');
+}
+
+// ===== TAB SWITCHING =====
+function switchTab(tabId) {
+    console.log('🔄 Switching to:', tabId);
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    const target = document.getElementById(tabId);
+    if (target) target.classList.add('active');
+    document.querySelectorAll('.sidebar-nav-item').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+    const titles = { tabOverview: 'Overview', tabAccounts: 'Accounts', tabDevices: 'Devices', tabSecurity: 'Security', tabActivity: 'Activity' };
+    const titleEl = document.getElementById('pageTitle');
+    if (titleEl) titleEl.textContent = titles[tabId] || 'Overview';
+    switch(tabId) {
+        case 'tabDevices': renderDevices(); break;
+        case 'tabSecurity': renderSecurityEvents(); renderAlerts(); break;
+        case 'tabActivity': renderActivity(); break;
+        case 'tabAccounts': renderTransactions(); break;
+        case 'tabOverview': renderActivityPreview(); break;
+    }
+}
+
+// ===== LOGIN =====
+function handleLogin() {
+    console.log('🔐 Logging in...');
+    State.accessToken = 'mock_token_' + Date.now();
+    document.getElementById('page-login').classList.add('hidden');
+    document.getElementById('page-dashboard').classList.remove('hidden');
+    renderDashboard();
+    showToast('✅ Welcome back!', 'success');
+}
+
+function renderDashboard() {
+    console.log('📊 Rendering dashboard...');
+    document.getElementById('userName').textContent = State.user.firstName + ' ' + State.user.lastName || 'User Name';
+    document.getElementById('userNameDisplay').textContent = State.user.firstName || 'User';
+    document.getElementById('userEmail').textContent = State.user.email || 'user@example.com';
+    document.getElementById('userAvatar').textContent = (State.user.firstName?.[0] || 'U') + (State.user.lastName?.[0] || '');
+    renderDevices();
+    renderAlerts();
+    renderActivity();
+    renderTransactions();
+    renderSecurityEvents();
+    renderActivityPreview();
+    // Session timer
+    let seconds = 900;
+    const timer = document.getElementById('sessionTimer');
+    if (timer) {
         setInterval(() => {
-            minutesRemaining--;
-            if (minutesRemaining <= 0) {
-                minutesRemaining = 15;
-                // Simulate token refresh
-                showToast('🔄 Session token refreshed', 'success', 2000);
-            }
-            // Update session display if needed
-        }, 60000); // Update every minute
-    }
-
-    // =========================================================
-    // PART 14: RISK SIMULATION (Demo Purpose)
-    // =========================================================
-
-    function setupRiskSimulation() {
-        const riskNumber = document.querySelector('.risk-number');
-        const riskBadge = document.querySelector('.risk-badge');
-        const riskScoreCircle = document.querySelector('.risk-score-circle');
-
-        if (!riskNumber) return;
-
-        // Slightly fluctuate risk score for demo
-        setInterval(() => {
-            const currentRisk = parseInt(riskNumber.textContent);
-            const fluctuation = (Math.random() - 0.5) * 6;
-            let newRisk = Math.max(2, Math.min(35, currentRisk + fluctuation));
-            newRisk = Math.round(newRisk);
-
-            riskNumber.textContent = `${newRisk}%`;
-
-            // Update badge color
-            if (riskBadge) {
-                riskBadge.className = 'risk-badge';
-                if (newRisk < 20) {
-                    riskBadge.classList.add('low');
-                } else if (newRisk < 40) {
-                    riskBadge.classList.add('medium');
-                } else {
-                    riskBadge.classList.add('high');
-                }
-                riskBadge.innerHTML = `<span class="risk-dot"></span>${newRisk}% Risk`;
-            }
-        }, 5000);
-    }
-
-    // =========================================================
-    // PART 15: TOAST FROM ALERTS (Initial demo)
-    // =========================================================
-
-    function showInitialAlerts() {
-        setTimeout(() => {
-            showToast('🛡️ AI Risk Engine: All systems normal', 'success', 3000);
+            const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
+            const secs = String(seconds % 60).padStart(2, '0');
+            timer.textContent = `${mins}:${secs}`;
+            seconds--;
+            if (seconds < 0) seconds = 900;
         }, 1000);
-
-        setTimeout(() => {
-            showToast('📱 Device fingerprint verified for Laptop A', 'info', 3000);
-        }, 3000);
     }
+    console.log('✅ Dashboard rendered (template mode)');
+}
 
-    // =========================================================
-    // PART 16: INITIALIZATION
-    // =========================================================
+function logout() {
+    document.getElementById('page-dashboard').classList.add('hidden');
+    document.getElementById('page-login').classList.remove('hidden');
+    showToast('Signed out successfully', 'info');
+}
 
-    function init() {
-        // Update time
-        updateTime();
-        setInterval(updateTime, 30000);
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 DOM loaded');
+    // Login
+    document.getElementById('loginPasskeyBtn').addEventListener('click', handleLogin);
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+    // Tab switching
+    document.querySelectorAll('.sidebar-nav-item').forEach(btn => {
+        btn.addEventListener('click', function() { switchTab(this.dataset.tab); });
+    });
+    // Alert filter
+    document.getElementById('alertFilter').addEventListener('change', renderAlerts);
+    // Refresh devices
+    document.getElementById('refreshDevices').addEventListener('click', function() {
+        showToast('🔄 Refreshing devices...', 'info');
+        setTimeout(() => { renderDevices(); showToast('Devices updated', 'success'); }, 800);
+    });
+    // Export activity
+    document.getElementById('exportActivity').addEventListener('click', function() {
+        showToast('📄 Activity exported!', 'success');
+    });
+    // OTP toggle
+    document.getElementById('switchToOtp').addEventListener('click', function() {
+        const area = document.getElementById('otpFallbackArea');
+        area.classList.toggle('hidden');
+        this.textContent = area.classList.contains('hidden') ? 'Verification Code' : 'Back to passkey';
+    });
+    document.getElementById('verifyOtpBtn').addEventListener('click', function() {
+        showToast('✅ Code verified!', 'success');
+        handleLogin();
+    });
+    document.getElementById('resendOtp').addEventListener('click', function() {
+        showToast('📧 New code sent to your email', 'info');
+    });
+    document.getElementById('goToRegister').addEventListener('click', function() {
+        document.getElementById('page-login').classList.add('hidden');
+        document.getElementById('page-register').classList.remove('hidden');
+    });
+    document.getElementById('goToLogin').addEventListener('click', function() {
+        document.getElementById('page-register').classList.add('hidden');
+        document.getElementById('page-login').classList.remove('hidden');
+    });
+    document.getElementById('registerBtn').addEventListener('click', function() {
+        showToast('✅ Account created!', 'success');
+        document.getElementById('page-register').classList.add('hidden');
+        document.getElementById('page-login').classList.remove('hidden');
+    });
+    console.log('✅ VaultID ready (template mode)');
+    showToast('🔐 Click "Sign in with Passkey" to access your dashboard', 'info');
+});
 
-        // Setup navigation
-        setupNavigation();
-
-        // Setup modal
-        setupModalEvents();
-
-        // Setup interactions
-        setupAlertInteractions();
-        setupDeviceInteractions();
-        setupRecoveryInteractions();
-        setupLogoutHandler();
-
-        // Session updates
-        setupSessionUpdater();
-
-        // Risk simulation
-        setupRiskSimulation();
-
-        // Initial alerts
-        showInitialAlerts();
-
-        // Set default active tab
-        switchTab('main');
-
-        console.log('🚀 VaultID Dashboard initialized');
-        console.log('🔐 Zero-Trust Authentication ready');
-        console.log('📋 Keyboard shortcuts: Click any card for details');
-    }
-
-    // =========================================================
-    // PART 17: EXPOSE FOR DEBUGGING
-    // =========================================================
-
-    window.VaultID = {
-        Elements,
-        AppState,
-        switchTab,
-        showModal,
-        closeModal,
-        showToast,
-        handleGlobalLogout,
-        confirmLogout,
-        init
-    };
-
-    // =========================================================
-    // START APP
-    // =========================================================
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
-
-})();
+// Expose to global
+window.switchTab = switchTab;
+window.showToast = showToast;
+window.handleQuickAction = handleQuickAction;
+window.approveTransaction = approveTransaction;
+window.declineTransaction = declineTransaction;
+window.logout = logout;
+window.handleLogin = handleLogin;
