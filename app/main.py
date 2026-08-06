@@ -34,12 +34,18 @@ app.include_router(webauthn.router)
 # ── Database lifecycle ────────────────────────────────────────────────────────
 @app.on_event("startup")
 async def startup():
-    await init_db_pool()
+    try:
+        await init_db_pool()
+    except Exception as e:
+        print(f"[!] Warning: Database pool init deferred ({e})")
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    await close_db_pool()
+    try:
+        await close_db_pool()
+    except Exception:
+        pass
 
 
 # ── AI Risk Engine endpoints ──────────────────────────────────────────────────

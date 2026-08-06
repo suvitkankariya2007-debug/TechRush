@@ -1,6 +1,7 @@
 # Web framework
 fastapi
 uvicorn[standard]
+email-validator
 
 # Database (PostgreSQL async)
 asyncpg
@@ -23,3 +24,4 @@ openai
 
 # Testing
 pytest
+
