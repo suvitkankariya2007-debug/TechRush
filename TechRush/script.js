@@ -19,7 +19,7 @@ const State = {
     accessToken: null,
     userId: null,
     sessionExpiry: null,
-    otpAttempts: 0,
+    otpAttempts: 1,
     otpTimer: null,
     sessionTimer: null,
     currentTab: 'overview',
