@@ -15,6 +15,7 @@ scikit-learn
 numpy
 joblib
 pandas
+SQLAlchemy
 
 # LLM Fallback (Module 3) — optional, loaded only when API keys are set
 google-generativeai

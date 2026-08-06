@@ -5,7 +5,7 @@ If suspicious activity is detected, triggers Global Logout (UPDATE active_sessio
 """
 
 from typing import Dict, Any
-from db import global_logout_trigger, create_audit_log
+from app.db_helpers import global_logout_trigger, create_audit_log
 
 class SmartSessionMonitor:
     def __init__(self, risk_threshold: float = 0.50):
