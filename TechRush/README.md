@@ -1,2 +1,0 @@
-# TechRush
-IEEE hackathon(PISB)
