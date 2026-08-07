@@ -40,7 +40,27 @@ def register_user(payload: UserCreate, request: Request, db=Depends(get_db)):
         raise HTTPException(status_code=400, detail="Username or Email already exists.")
 
 
+# In-memory store for lightweight QR polling to avoid altering database models
+qr_sessions = {}
+
+@router.get("/qr/status")
+def qr_status(session_id: str):
+    # Lightweight polling endpoint for Cross-Device QR Approval.
+    status = qr_sessions.get(session_id, "PENDING")
+    if status == "APPROVED":
+        return {"status": "APPROVED", "message": "Session validated"}
+    return {"status": "PENDING", "message": "Waiting for device approval"}
+
+@router.post("/qr/approve")
+def qr_approve(payload: dict):
+    session_id = payload.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    qr_sessions[session_id] = "APPROVED"
+    return {"status": "SUCCESS", "message": "Session approved via QR"}
+
 @router.post("/otp/request")
+@router.post("/otp/send")
 async def request_otp(payload: OTPRequest, db=Depends(get_db)):
     user = get_user_by_email(db, payload.email)
     if not user:

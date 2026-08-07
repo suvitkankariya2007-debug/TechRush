@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VaultID - Universal Passkey Portal</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/@simplewebauthn/browser@9.0.1/dist/bundle/index.umd.min.js"></script>
+</head>
+<body>
+
+    <!-- TOAST CONTAINER -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- PAGE 1: LOGIN -->
+    <div id="page-login" class="auth-page">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <i class="fas fa-shield-halved"></i>
+                    <span>VaultID</span>
+                </div>
+                <h2>Secure Sign In</h2>
+                <p>Passwordless authentication for your banking</p>
+            </div>
+
+            <div class="auth-body">
+                <div class="form-group">
+                    <label for="loginEmail">Email address</label>
+                    <input type="email" id="loginEmail" class="form-control" placeholder="demo@vaultid.com">
+                </div>
+
+                <button id="loginPasskeyBtn" class="btn btn-primary btn-block">
+                    <i class="fas fa-fingerprint"></i> Sign in with Passkey
+                </button>
+
+                <div class="auth-divider">
+                    <span>or continue with</span>
+                </div>
+
+                <button id="switchToOtp" type="button" class="btn btn-secondary btn-block">
+                    <i class="fas fa-mobile-screen"></i> Verification Code
+                </button>
+
+                <!-- OTP FALLBACK SECTION -->
+                <div id="otpFallbackArea" class="otp-area hidden">
+                    <p class="otp-instruction">Enter 6-digit code</p>
+                    <div id="otpInputs" class="otp-inputs">
+                        <input type="text" maxlength="1" id="otpInput1" class="otp-box">
+                        <input type="text" maxlength="1" class="otp-box">
+                        <input type="text" maxlength="1" class="otp-box">
+                        <input type="text" maxlength="1" class="otp-box">
+                        <input type="text" maxlength="1" class="otp-box">
+                        <input type="text" maxlength="1" class="otp-box">
+                    </div>
+                    <button type="button" id="verifyOtpBtn" class="btn btn-success btn-block">Verify Code</button>
+                    <p id="resendOtp" class="link-text">Resend code (60s)</p>
+                </div>
+            </div>
+
+            <div class="auth-footer">
+                <p>New to VaultID? <a href="#" id="goToRegister">Create account</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE 2: REGISTER -->
+    <div id="page-register" class="auth-page hidden">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <i class="fas fa-shield-halved"></i>
+                    <span>VaultID</span>
+                </div>
+                <h2>Create your account</h2>
+                <p>Get started with passwordless banking security</p>
+            </div>
+
+            <div class="auth-body">
+                <div class="form-group">
+                    <label for="regFirstName">Username</label>
+                    <input type="text" id="regFirstName" class="form-control" placeholder="johndoe">
+                </div>
+                <div class="form-group">
+                    <label for="regEmail">Email address</label>
+                    <input type="email" id="regEmail" class="form-control" placeholder="john@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="regLastName">Phone number (Optional)</label>
+                    <input type="text" id="regLastName" class="form-control" placeholder="+1 234 567 890">
+                </div>
+                <button id="registerBtn" class="btn btn-primary btn-block">
+                    <i class="fas fa-user-plus"></i> Create Account
+                </button>
+            </div>
+
+            <div class="auth-footer">
+                <p>Already have an account? <a href="#" id="goToLogin">Sign in</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE 3: DASHBOARD -->
+    <div id="page-dashboard" class="dashboard-page hidden">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fas fa-shield-halved"></i>
+                <span>VaultID</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="sidebar-nav-item active" data-tab="tabOverview">
+                    <i class="fas fa-home"></i> Overview
+                </button>
+                <button class="sidebar-nav-item" data-tab="tabAccounts">
+                    <i class="fas fa-wallet"></i> Accounts
+                </button>
+                <button class="sidebar-nav-item" data-tab="tabDevices">
+                    <i class="fas fa-mobile-screen"></i> Devices
+                </button>
+                <button class="sidebar-nav-item" data-tab="tabSecurity">
+                    <i class="fas fa-shield-halved"></i> Security
+                </button>
+                <button class="sidebar-nav-item" data-tab="tabActivity">
+                    <i class="fas fa-clock-rotate-left"></i> Activity
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-profile-summary">
+                    <div id="userAvatar" class="avatar">U</div>
+                    <div class="user-info">
+                        <div id="userName" class="user-name">User</div>
+                        <div id="userEmail" class="user-email">user@example.com</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            <header class="top-header">
+                <h1 id="pageTitle">Overview</h1>
+            </header>
+
+            <div class="tab-content">
+                <!-- TAB 1: OVERVIEW -->
+                <div id="tabOverview" class="tab-pane active">
+                    <div class="action-grid">
+                        <div class="action-card quick-action-btn">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>Send</span>
+                        </div>
+                        <div class="action-card quick-action-btn">
+                            <i class="fas fa-arrow-down"></i>
+                            <span>Receive</span>
+                        </div>
+                        <div class="action-card quick-action-btn">
+                            <i class="fas fa-arrow-right-arrow-left"></i>
+                            <span>Transfer</span>
+                        </div>
+                        <div class="action-card quick-action-btn">
+                            <i class="fas fa-file-lines"></i>
+                            <span>Statements</span>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3><i class="fas fa-bell"></i> Recent Activity Log</h3>
+                        <div id="activityPreview" style="margin-top: 1rem;"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3><i class="fas fa-shield-halved"></i> Security Status</h3>
+                        <p class="text-muted" style="margin-top: 0.5rem;">Passkey biometric verification is fully active for this account.</p>
+                    </div>
+                </div>
+
+                <!-- TAB 2: ACCOUNTS -->
+                <div id="tabAccounts" class="tab-pane hidden">
+                    <div class="card">
+                        <h3>Account Activity & Transactions</h3>
+                        <div id="accountsHistory" style="margin-top: 1rem;"></div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: DEVICES -->
+                <div id="tabDevices" class="tab-pane hidden">
+                    <div class="card">
+                        <h3>Connected Devices</h3>
+                        <div id="deviceList" style="margin-top: 1rem;"></div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: SECURITY -->
+                <div id="tabSecurity" class="tab-pane hidden">
+                    <div class="card">
+                        <h3>Security Alerts</h3>
+                        <div id="alertList" style="margin-top: 1rem;"></div>
+                    </div>
+                </div>
+
+                <!-- TAB 5: ACTIVITY -->
+                <div id="tabActivity" class="tab-pane hidden">
+                    <div class="card">
+                        <h3>System Activity Log</h3>
+                        <div id="transactionHistory" style="margin-top: 1rem;"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL -->
+    <div id="quickActionModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 id="quickActionTitle">Transfer Funds</h3>
+            <div class="form-group" style="margin-top: 1rem;">
+                <label>Recipient Email</label>
+                <input type="text" id="quickActionRecipient" class="form-control" placeholder="user@vaultid.com">
+            </div>
+            <div class="form-group">
+                <label>Amount ($)</label>
+                <input type="number" id="quickActionAmount" class="form-control" placeholder="100.00">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 1rem;">
+                <button type="button" onclick="closeQuickActionModal()" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="confirmQuickActionBtn" class="btn btn-primary">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

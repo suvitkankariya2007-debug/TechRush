@@ -1,3 +1,4 @@
+# VaultID Email OTP Engine (app/services/otp.py)
 import random
 import time
 import smtplib
