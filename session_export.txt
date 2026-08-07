@@ -1,0 +1,719 @@
+On branch feature/mod123
+Your branch is ahead of 'origin/feature/mod123' by 7 commits.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   app/config.py
+	modified:   app/crud.py
+	modified:   app/database.py
+	modified:   app/models.py
+	modified:   app/routers/auth.py
+	modified:   app/routers/webauthn.py
+	modified:   schema.sql
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	WALKTHROUGH.md
+	patch_script.py
+	session_export.txt
+	test_endpoints.py
+
+no changes added to commit (use "git add" and/or "git commit -a")
+diff --git a/app/config.py b/app/config.py
+index e660a1d..4898cb3 100644
+--- a/app/config.py
++++ b/app/config.py
+@@ -5,13 +5,9 @@ from urllib.parse import quote_plus
+ 
+ 
+ class Settings(BaseSettings):
+-    # Database
+-    DB_HOST: str = Field("127.0.0.1", env="DB_HOST")
+-    DB_PORT: int = Field(5432, env="DB_PORT")
+-    DB_USER: str = Field("", env="DB_USER")
+-    DB_PASSWORD: str = Field("", env="DB_PASSWORD")
+-    DB_NAME: str = Field("vaultid", env="DB_NAME")
+-
++    # Database (Defaults to local SQLite to avoid connection-refused errors)
++    DATABASE_URL: str = Field("sqlite:///./vaultid.db", env="DATABASE_URL")
++    
+     # JWT
+     JWT_SECRET_KEY: str = Field(..., env="JWT_SECRET_KEY")
+     TOKEN_EXPIRATION_MINUTES: int = Field(30, env="TOKEN_EXPIRATION_MINUTES")
+@@ -34,11 +30,11 @@ class Settings(BaseSettings):
+ 
+     @property
+     def DATABASE_DSN(self) -> str:
+-        """asyncpg connection string."""
+-        return (
+-            f"postgresql://{self.DB_USER}:{quote_plus(self.DB_PASSWORD)}"
+-            f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+-        )
++        """Returns connection string safely for SQLAlchemy."""
++        url = self.DATABASE_URL
++        if url.startswith("postgres://"):
++            return url.replace("postgres://", "postgresql://", 1)
++        return url
+ 
+     class Config:
+         env_file = ".env"
+@@ -57,4 +53,4 @@ OPENAI_API_KEY = settings.OPENAI_API_KEY
+ GEMINI_API_KEY = settings.GEMINI_API_KEY
+ 
+ # Path to the trained IsolationForest artifact (risk_model.pkl lives at repo root)
+-MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "risk_model.pkl")
++MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "risk_model.pkl")
+\ No newline at end of file
+diff --git a/app/crud.py b/app/crud.py
+index d85ee03..8603707 100644
+--- a/app/crud.py
++++ b/app/crud.py
+@@ -1,113 +1,102 @@
++
+ import uuid
+ import random
+ from typing import Union
+ from datetime import datetime
++from sqlalchemy.orm import Session
++from app.models import User, UserDevice, OTPCode, WebAuthnChallenge, WebAuthnCredential, ActiveSession, LoginHistory
++
++def get_user_by_email(db: Session, email: str):
++    return db.query(User).filter(User.email == email).first()
++
++def get_user_by_id(db: Session, user_id: str):
++    return db.query(User).filter(User.id == str(user_id)).first()
++
++def get_user_by_username(db: Session, username: str):
++    return db.query(User).filter(User.username == username).first()
++
++def create_user(db: Session, username: str, email: str, phone: str, device_fp: str, ip: str, ua: str):
++    user = User(id=str(uuid.uuid4()), username=username, email=email, phone=phone)
++    db.add(user)
++    device = UserDevice(user_id=user.id, device_fingerprint=device_fp, ip_address=ip, user_agent=ua)
++    db.add(device)
++    db.commit()
++    db.refresh(user)
++    return user
++
++def get_user_devices(db: Session, user_id: str):
++    return db.query(UserDevice).filter(UserDevice.user_id == str(user_id)).all()
+ 
+-# ---- Users ----
+-async def get_user_by_email(conn, email: str):
+-    return await conn.fetchrow("SELECT * FROM users WHERE email = $1", email)
+-
+-async def get_user_by_id(conn, user_id: Union[uuid.UUID, str, int]):
+-    return await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
+-
+-async def get_user_by_username(conn, username: str):
+-    return await conn.fetchrow("SELECT * FROM users WHERE username = $1", username)
+-
+-async def create_user(conn, username: str, email: str, phone: str, device_fp: str, ip: str, ua: str):
+-    user_id = uuid.uuid4()
+-    await conn.execute(
+-        "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)",
+-        user_id, username, email, phone
+-    )
+-    await conn.execute(
+-        "INSERT INTO user_devices (user_id, device_fingerprint, ip_address, user_agent) VALUES ($1, $2, $3, $4)",
+-        user_id, device_fp, ip, ua
+-    )
+-    return await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
+-
+-# ---- Devices ----
+-async def get_user_devices(conn, user_id: Union[uuid.UUID, str, int]):
+-    return await conn.fetch("SELECT * FROM user_devices WHERE user_id = $1", user_id)
+-
+-# ---- OTP ----
+-async def create_otp(conn, user_id: Union[uuid.UUID, str, int], email: str):
+-    await conn.execute("DELETE FROM otp_codes WHERE user_id = $1", user_id)
++def create_otp(db: Session, user_id: str, email: str):
++    db.query(OTPCode).filter(OTPCode.user_id == str(user_id)).delete()
+     code = f"{random.randint(100000, 999999)}"
+-    await conn.execute(
+-        "INSERT INTO otp_codes (user_id, email, code) VALUES ($1, $2, $3)",
+-        user_id, email, code
+-    )
+-    return await conn.fetchrow(
+-        "SELECT * FROM otp_codes WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
+-        user_id
+-    )
+-
+-async def verify_otp(conn, user_id: Union[uuid.UUID, str, int], code: str) -> bool:
+-    row = await conn.fetchrow(
+-        "SELECT * FROM otp_codes WHERE user_id = $1 AND code = $2 AND used = FALSE AND expires_at > NOW()",
+-        user_id, code
+-    )
+-    if not row:
++    otp = OTPCode(user_id=str(user_id), email=email, code=code)
++    db.add(otp)
++    db.commit()
++    db.refresh(otp)
++    return otp
++
++def verify_otp(db: Session, user_id: str, code: str) -> bool:
++    otp = db.query(OTPCode).filter(
++        OTPCode.user_id == str(user_id),
++        OTPCode.code == code,
++        OTPCode.used == False,
++        OTPCode.expires_at > datetime.utcnow()
++    ).first()
++    if not otp:
+         return False
+-    await conn.execute("UPDATE otp_codes SET used = TRUE WHERE id = $1", row["id"])
++    otp.used = True
++    db.commit()
+     return True
+ 
+-# ---- WebAuthn Challenges ----
+-async def store_challenge(conn, user_id: Union[uuid.UUID, str, int], challenge_b64: str):
+-    await conn.execute("DELETE FROM webauthn_challenges WHERE user_id = $1", user_id)
+-    return await conn.fetchrow(
+-        "INSERT INTO webauthn_challenges (user_id, challenge) VALUES ($1, $2) RETURNING *",
+-        user_id, challenge_b64
+-    )
+-
+-async def get_challenge(conn, user_id: Union[uuid.UUID, str, int]):
+-    row = await conn.fetchrow(
+-        """SELECT challenge FROM webauthn_challenges
+-           WHERE user_id = $1 AND expires_at > NOW()
+-           ORDER BY created_at DESC LIMIT 1""",
+-        user_id
+-    )
+-    return row["challenge"] if row else None
+-
+-async def delete_challenge(conn, user_id: Union[uuid.UUID, str, int]):
+-    await conn.execute("DELETE FROM webauthn_challenges WHERE user_id = $1", user_id)
+-
+-# ---- WebAuthn Credentials ----
+-async def store_credential(conn, user_id: Union[uuid.UUID, str, int], credential_id: str, public_key: str,
+-                           sign_count: int, device_name: str = None):
+-    await conn.execute(
+-        """INSERT INTO webauthn_credentials (user_id, credential_id, public_key, sign_count, device_name)
+-           VALUES ($1, $2, $3, $4, $5)""",
+-        user_id, credential_id, public_key, sign_count, device_name
+-    )
+-
+-async def get_credentials_by_user(conn, user_id: Union[uuid.UUID, str, int]):
+-    return await conn.fetch("SELECT * FROM webauthn_credentials WHERE user_id = $1", user_id)
+-
+-async def get_credential_by_id(conn, credential_id: str):
+-    return await conn.fetchrow("SELECT * FROM webauthn_credentials WHERE credential_id = $1", credential_id)
+-
+-async def update_sign_count(conn, credential_id: str, new_sign_count: int):
+-    await conn.execute(
+-        "UPDATE webauthn_credentials SET sign_count = $1 WHERE credential_id = $2",
+-        new_sign_count, credential_id
+-    )
+-
+-# ---- Active Sessions ----
+-async def create_active_session(conn, user_id: Union[uuid.UUID, str, int], device_fp: str, ip: str, ua: str, expires_at: datetime):
+-    return await conn.fetchval(
+-        """INSERT INTO active_sessions (user_id, device_fingerprint, ip_address, user_agent, expires_at)
+-           VALUES ($1, $2, $3, $4, $5) RETURNING session_id""",
+-        user_id, device_fp, ip, ua, expires_at
+-    )
+-
+-async def revoke_all_sessions(conn, user_id: Union[uuid.UUID, str, int]):
+-    await conn.execute("UPDATE active_sessions SET is_active = FALSE WHERE user_id = $1", user_id)
+-
+-# ---- Audit Log ----
+-async def log_login_attempt(conn, user_id: Union[uuid.UUID, str, int], ip: str, risk_score: float, method: str, status: str):
+-    await conn.execute(
+-        """INSERT INTO login_history (user_id, ip_address, risk_score, auth_method, status)
+-           VALUES ($1, $2, $3, $4, $5)""",
+-        user_id, ip, risk_score, method, status
+-    )
+\ No newline at end of file
++def store_challenge(db: Session, user_id: str, challenge_b64: str):
++    db.query(WebAuthnChallenge).filter(WebAuthnChallenge.user_id == str(user_id)).delete()
++    chal = WebAuthnChallenge(user_id=str(user_id), challenge=challenge_b64)
++    db.add(chal)
++    db.commit()
++    db.refresh(chal)
++    return chal
++
++def get_challenge(db: Session, user_id: str):
++    chal = db.query(WebAuthnChallenge).filter(
++        WebAuthnChallenge.user_id == str(user_id),
++        WebAuthnChallenge.expires_at > datetime.utcnow()
++    ).order_by(WebAuthnChallenge.created_at.desc()).first()
++    return chal.challenge if chal else None
++
++def delete_challenge(db: Session, user_id: str):
++    db.query(WebAuthnChallenge).filter(WebAuthnChallenge.user_id == str(user_id)).delete()
++    db.commit()
++
++def store_credential(db: Session, user_id: str, credential_id: str, public_key: str, sign_count: int, device_name: str = None):
++    cred = WebAuthnCredential(user_id=str(user_id), credential_id=credential_id, public_key=public_key, sign_count=sign_count, device_name=device_name)
++    db.add(cred)
++    db.commit()
++
++def get_credentials_by_user(db: Session, user_id: str):
++    return db.query(WebAuthnCredential).filter(WebAuthnCredential.user_id == str(user_id)).all()
++
++def get_credential_by_id(db: Session, credential_id: str):
++    return db.query(WebAuthnCredential).filter(WebAuthnCredential.credential_id == credential_id).first()
++
++def update_sign_count(db: Session, credential_id: str, new_sign_count: int):
++    cred = db.query(WebAuthnCredential).filter(WebAuthnCredential.credential_id == credential_id).first()
++    if cred:
++        cred.sign_count = new_sign_count
++        db.commit()
++
++def create_active_session(db: Session, user_id: str, device_fp: str, ip: str, ua: str, expires_at: datetime):
++    session = ActiveSession(user_id=str(user_id), device_fingerprint=device_fp, ip_address=ip, user_agent=ua, expires_at=expires_at)
++    db.add(session)
++    db.commit()
++    db.refresh(session)
++    return session.session_id
++
++def revoke_all_sessions(db: Session, user_id: str):
++    db.query(ActiveSession).filter(ActiveSession.user_id == str(user_id)).update({"is_active": False})
++    db.commit()
++
++def log_login_attempt(db: Session, user_id: str, ip: str, risk_score: float, method: str, status: str):
++    log = LoginHistory(user_id=str(user_id), ip_address=ip, risk_score=risk_score, auth_method=method, status=status)
++    db.add(log)
++    db.commit()
+diff --git a/app/database.py b/app/database.py
+index 3f346ed..1314c49 100644
+--- a/app/database.py
++++ b/app/database.py
+@@ -1,25 +1,31 @@
+-from typing import Optional
+-import asyncpg
++from sqlalchemy import create_engine
++from sqlalchemy.orm import declarative_base, sessionmaker
+ from app.config import settings
+ 
+-pool: Optional[asyncpg.Pool] = None
++# Use settings.DATABASE_DSN to support SQLite and properly formatted Postgres DSN
++SQLALCHEMY_DATABASE_URL = settings.DATABASE_DSN
+ 
++# SQLite needs connect_args check_same_thread=False
++connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
+ 
+-async def init_db_pool():
+-    """Create the shared connection pool. Call once on app startup."""
+-    global pool
+-    pool = await asyncpg.create_pool(dsn=settings.DATABASE_DSN, min_size=1, max_size=10)
++engine = create_engine(
++    SQLALCHEMY_DATABASE_URL, connect_args=connect_args
++)
+ 
++SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+ 
+-async def close_db_pool():
+-    """Close the shared connection pool. Call once on app shutdown."""
+-    global pool
+-    if pool is not None:
+-        await pool.close()
+-        pool = None
++Base = declarative_base()
+ 
++def get_db():
++    db = SessionLocal()
++    try:
++        yield db
++    finally:
++        db.close()
+ 
+-async def get_db():
+-    """FastAPI dependency: yields a single connection from the pool."""
+-    async with pool.acquire() as conn:
+-        yield conn
+\ No newline at end of file
++# Dummy helper functions to satisfy async imports from main.py
++async def init_db_pool():
++    Base.metadata.create_all(bind=engine)
++
++async def close_db_pool():
++    pass
+\ No newline at end of file
+diff --git a/app/models.py b/app/models.py
+index 0cd275c..232200b 100644
+--- a/app/models.py
++++ b/app/models.py
+@@ -1,52 +1,73 @@
++
+ import uuid
+ from datetime import datetime, timedelta
+-from sqlalchemy import Column, String, DateTime, Boolean, Integer, ForeignKey, Text
+-from sqlalchemy.dialects.postgresql import UUID as PGUUID
++from sqlalchemy import Column, String, DateTime, Boolean, Integer, ForeignKey, Text, Float
+ from sqlalchemy.orm import relationship
+ from app.database import Base
+ 
++def gen_uuid():
++    return str(uuid.uuid4())
++
+ class User(Base):
+     __tablename__ = "users"
+-
+-    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
++    id = Column(String, primary_key=True, default=gen_uuid)
++    username = Column(String, unique=True, nullable=False)
+     email = Column(String, unique=True, nullable=False, index=True)
+     phone = Column(String, nullable=True)
+     created_at = Column(DateTime, default=datetime.utcnow)
+-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+ 
+-    credentials = relationship("WebAuthnCredential", back_populates="user", cascade="all, delete-orphan")
+-    challenges = relationship("WebAuthnChallenge", back_populates="user")
++class UserDevice(Base):
++    __tablename__ = "user_devices"
++    id = Column(Integer, primary_key=True, autoincrement=True)
++    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
++    device_fingerprint = Column(String)
++    ip_address = Column(String)
++    user_agent = Column(String)
+ 
+ class WebAuthnCredential(Base):
+     __tablename__ = "webauthn_credentials"
+-
+-    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+-    user_id = Column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+-    credential_id = Column(String, unique=True, nullable=False)   # base64
+-    public_key = Column(Text, nullable=False)                     # base64
++    id = Column(String, primary_key=True, default=gen_uuid)
++    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
++    credential_id = Column(String, unique=True, nullable=False)
++    public_key = Column(Text, nullable=False)
+     sign_count = Column(Integer, default=0)
+     device_name = Column(String, nullable=True)
+     created_at = Column(DateTime, default=datetime.utcnow)
+ 
+-    user = relationship("User", back_populates="credentials")
+-
+ class WebAuthnChallenge(Base):
+     __tablename__ = "webauthn_challenges"
+-
+-    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+-    user_id = Column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+-    challenge = Column(Text, nullable=False)   # stored as Base64 string
++    id = Column(String, primary_key=True, default=gen_uuid)
++    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
++    challenge = Column(Text, nullable=False)
+     created_at = Column(DateTime, default=datetime.utcnow)
+     expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(minutes=5))
+ 
+-    user = relationship("User", back_populates="challenges")
+-
+ class OTPCode(Base):
+     __tablename__ = "otp_codes"
+-
+-    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
++    id = Column(String, primary_key=True, default=gen_uuid)
++    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+     email = Column(String, nullable=False, index=True)
+-    code = Column(String(6), nullable=False)
++    code = Column(String(10), nullable=False)
+     created_at = Column(DateTime, default=datetime.utcnow)
+-    expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(minutes=5))
+-    used = Column(Boolean, default=False)
+\ No newline at end of file
++    expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(minutes=10))
++    used = Column(Boolean, default=False)
++
++class ActiveSession(Base):
++    __tablename__ = "active_sessions"
++    session_id = Column(String, primary_key=True, default=gen_uuid)
++    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
++    device_fingerprint = Column(String)
++    ip_address = Column(String)
++    user_agent = Column(String)
++    expires_at = Column(DateTime)
++    is_active = Column(Boolean, default=True)
++
++class LoginHistory(Base):
++    __tablename__ = "login_history"
++    id = Column(Integer, primary_key=True, autoincrement=True)
++    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
++    ip_address = Column(String)
++    risk_score = Column(Float)
++    auth_method = Column(String)
++    status = Column(String)
++    timestamp = Column(DateTime, default=datetime.utcnow)
+diff --git a/app/routers/auth.py b/app/routers/auth.py
+index f5f1264..6e27060 100644
+--- a/app/routers/auth.py
++++ b/app/routers/auth.py
+@@ -15,14 +15,14 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+ 
+ 
+ @router.post("/register", response_model=UserResponse)
+-async def register_user(payload: UserCreate, request: Request, conn=Depends(get_db)):
+-    existing_email = await get_user_by_email(conn, payload.email)
++def register_user(payload: UserCreate, request: Request, db=Depends(get_db)):
++    existing_email = get_user_by_email(db, payload.email)
+     if existing_email:
+         raise HTTPException(status_code=400, detail="Email already registered.")
+ 
+     try:
+-        user = await create_user(
+-            conn,
++        user = create_user(
++            db,
+             payload.username,
+             payload.email,
+             payload.phone or "",
+@@ -31,57 +31,57 @@ async def register_user(payload: UserCreate, request: Request, conn=Depends(get_
+             payload.user_agent or request.headers.get("user-agent", "")
+         )
+         return UserResponse(
+-            id=user["id"],
+-            username=user["username"],
+-            email=user["email"],
+-            created_at=user["created_at"]
++            id=user.id,
++            username=user.username,
++            email=user.email,
++            created_at=user.created_at
+         )
+     except asyncpg.exceptions.UniqueViolationError:
+         raise HTTPException(status_code=400, detail="Username or Email already exists.")
+ 
+ 
+ @router.post("/otp/request")
+-async def request_otp(payload: OTPRequest, conn=Depends(get_db)):
+-    user = await get_user_by_email(conn, payload.email)
++def request_otp(payload: OTPRequest, db=Depends(get_db)):
++    user = get_user_by_email(db, payload.email)
+     if not user:
+         raise HTTPException(status_code=404, detail="User not found")
+-    otp = await create_otp(conn, user["id"], user["email"])
+-    await send_otp_email(user["email"], otp["code"])
++    otp = create_otp(db, user.id, user.email)
++    send_otp_email(user.email, otp.code)
+     return {"message": f"OTP sent to {user['email']}"}
+ 
+ 
+ @router.post("/otp/verify")
+-async def verify_otp_code(payload: OTPVerify, request: Request, conn=Depends(get_db)):
+-    user = await get_user_by_email(conn, payload.email)
++def verify_otp_code(payload: OTPVerify, request: Request, db=Depends(get_db)):
++    user = get_user_by_email(db, payload.email)
+     if not user:
+         raise HTTPException(status_code=404, detail="User not found")
+-    valid = await verify_otp(conn, user["id"], payload.code)
++    valid = verify_otp(db, user.id, payload.code)
+     if not valid:
+         raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+ 
+     client_ip = payload.ip_address or request.client.host
+-    await log_login_attempt(conn, user["id"], client_ip, 0.0, "OTP", "SUCCESS")
++    log_login_attempt(db, user.id, client_ip, 0.0, "OTP", "SUCCESS")
+ 
+-    token = create_jwt(str(user["id"]))
++    token = create_jwt(str(user.id))
+     expires_at = datetime.utcnow() + timedelta(minutes=settings.TOKEN_EXPIRATION_MINUTES)
+-    await create_active_session(
+-        conn, user["id"],
++    create_active_session(
++        db, user.id,
+         payload.device_fingerprint,
+         client_ip,
+         payload.user_agent or request.headers.get("user-agent", ""),
+         expires_at
+     )
+-    credentials = await get_credentials_by_user(conn, user["id"])
++    credentials = get_credentials_by_user(db, user.id)
+     return {
+         "status": "SUCCESS",
+         "jwt_token": token,
+-        "user_id": str(user["id"]),
++        "user_id": str(user.id),
+         "has_passkey": len(credentials) > 0,
+         "message": "Authentication successful via OTP"
+     }
+ 
+ 
+ @router.post("/logout/all")
+-async def logout_all_devices(payload: GlobalLogoutRequest, conn=Depends(get_db)):
+-    await revoke_all_sessions(conn, payload.user_id)
++def logout_all_devices(payload: GlobalLogoutRequest, db=Depends(get_db)):
++    revoke_all_sessions(db, payload.user_id)
+     return {"message": "All sessions revoked"}
+\ No newline at end of file
+diff --git a/app/routers/webauthn.py b/app/routers/webauthn.py
+index c89fdb2..2d4b203 100644
+--- a/app/routers/webauthn.py
++++ b/app/routers/webauthn.py
+@@ -25,25 +25,25 @@ router = APIRouter(prefix="/api/v1/auth/webauthn", tags=["webauthn"])
+ 
+ 
+ @router.post("/register/begin", response_model=WebAuthnRegBeginResponse)
+-async def webauthn_register_begin(payload: WebAuthnRegBeginRequest, conn=Depends(get_db)):
+-    user = await get_user_by_id(conn, payload.user_id)
++def webauthn_register_begin(payload: WebAuthnRegBeginRequest, db=Depends(get_db)):
++    user = get_user_by_id(db, payload.user_id)
+     if not user:
+         raise HTTPException(status_code=404, detail="User not found")
+     options_dict = generate_registration_options_for_user(
+-        user_id=str(user["id"]),
+-        username=user["email"],
+-        display_name=user["email"]
++        user_id=str(user.id),
++        username=user.email,
++        display_name=user.email
+     )
+-    await store_challenge(conn, user["id"], options_dict["challenge"])
++    store_challenge(db, user.id, options_dict["challenge"])
+     return WebAuthnRegBeginResponse(options=options_dict)
+ 
+ 
+ @router.post("/register/complete", response_model=WebAuthnRegCompleteResponse)
+-async def webauthn_register_complete(payload: WebAuthnRegCompleteRequest, conn=Depends(get_db)):
+-    user = await get_user_by_id(conn, payload.user_id)
++def webauthn_register_complete(payload: WebAuthnRegCompleteRequest, db=Depends(get_db)):
++    user = get_user_by_id(db, payload.user_id)
+     if not user:
+         raise HTTPException(status_code=404, detail="User not found")
+-    challenge_b64 = await get_challenge(conn, user["id"])
++    challenge_b64 = get_challenge(db, user.id)
+     if not challenge_b64:
+         raise HTTPException(status_code=400, detail="No active challenge")
+     challenge = base64.b64decode(challenge_b64)
+@@ -59,11 +59,11 @@ async def webauthn_register_complete(payload: WebAuthnRegCompleteRequest, conn=D
+ 
+     credential_id = base64.b64encode(verification.credential_id).decode()
+     public_key = base64.b64encode(verification.credential_public_key).decode()
+-    await store_credential(
+-        conn, user["id"], credential_id, public_key, verification.sign_count,
++    store_credential(
++        db, user.id, credential_id, public_key, verification.sign_count,
+         device_name=payload.device_name
+     )
+-    await delete_challenge(conn, user["id"])
++    delete_challenge(db, user.id)
+     return WebAuthnRegCompleteResponse(
+         success=True,
+         message="Credential registered",
+@@ -72,31 +72,31 @@ async def webauthn_register_complete(payload: WebAuthnRegCompleteRequest, conn=D
+ 
+ 
+ @router.post("/login/begin", response_model=WebAuthnLoginBeginResponse)
+-async def webauthn_login_begin(payload: WebAuthnLoginBeginRequest, conn=Depends(get_db)):
+-    user = await get_user_by_email(conn, payload.email)
++def webauthn_login_begin(payload: WebAuthnLoginBeginRequest, db=Depends(get_db)):
++    user = get_user_by_email(db, payload.email)
+     if not user:
+         raise HTTPException(status_code=404, detail="User not found")
+ 
+-    credentials = await get_credentials_by_user(conn, user["id"])
++    credentials = get_credentials_by_user(db, user.id)
+     if not credentials:
+-        return WebAuthnLoginBeginResponse(status="NO_PASSKEY", user_id=user["id"])
++        return WebAuthnLoginBeginResponse(status="NO_PASSKEY", user_id=user.id)
+ 
+-    credential_ids = [c["credential_id"] for c in credentials]
++    credential_ids = [c.credential_id for c in credentials]
+     options_dict = generate_authentication_options_for_user(credential_ids=credential_ids)
+-    await store_challenge(conn, user["id"], options_dict["challenge"])
++    store_challenge(db, user.id, options_dict["challenge"])
+     return WebAuthnLoginBeginResponse(
+         status="PASSKEY_REQUIRED",
+         webauthn_options=options_dict,
+-        user_id=user["id"]
++        user_id=user.id
+     )
+ 
+ 
+ @router.post("/login/complete", response_model=WebAuthnLoginCompleteResponse)
+-async def webauthn_login_complete(payload: WebAuthnLoginCompleteRequest, conn=Depends(get_db)):
+-    user = await get_user_by_id(conn, payload.user_id)
++def webauthn_login_complete(payload: WebAuthnLoginCompleteRequest, db=Depends(get_db)):
++    user = get_user_by_id(db, payload.user_id)
+     if not user:
+         raise HTTPException(status_code=404, detail="User not found")
+-    challenge_b64 = await get_challenge(conn, user["id"])
++    challenge_b64 = get_challenge(db, user.id)
+     if not challenge_b64:
+         raise HTTPException(status_code=400, detail="No active challenge")
+     challenge = base64.b64decode(challenge_b64)
+@@ -104,11 +104,11 @@ async def webauthn_login_complete(payload: WebAuthnLoginCompleteRequest, conn=De
+     cred_id = payload.credential.get("id")
+     if not cred_id:
+         raise HTTPException(status_code=400, detail="Missing credential id")
+-    credential = await get_credential_by_id(conn, cred_id)
++    credential = get_credential_by_id(db, cred_id)
+     if not credential:
+         raise HTTPException(status_code=404, detail="Credential not found")
+ 
+-    public_key = base64.b64decode(credential["public_key"])
++    public_key = base64.b64decode(credential.public_key)
+     try:
+         verification = verify_authentication_response(
+             credential=payload.credential,
+@@ -116,14 +116,14 @@ async def webauthn_login_complete(payload: WebAuthnLoginCompleteRequest, conn=De
+             expected_rp_id=settings.RP_ID,
+             expected_origin=settings.ORIGIN,
+             credential_public_key=public_key,
+-            credential_sign_count=credential["sign_count"],
++            credential_sign_count=credential.sign_count,
+         )
+     except Exception as e:
+         raise HTTPException(status_code=400, detail=f"Verification failed: {str(e)}")
+ 
+-    await update_sign_count(conn, cred_id, verification.new_sign_count)
+-    await delete_challenge(conn, user["id"])
+-    token = create_jwt(str(user["id"]))
++    update_sign_count(db, cred_id, verification.new_sign_count)
++    delete_challenge(db, user.id)
++    token = create_jwt(str(user.id))
+     return WebAuthnLoginCompleteResponse(
+         success=True,
+         jwt_token=token,
+diff --git a/schema.sql b/schema.sql
+index ec12176..97ecf3d 100644
+--- a/schema.sql
++++ b/schema.sql
+@@ -1,4 +1,4 @@
+-CREATE TABLE IF NOT EXISTS users (
++/*CREATE TABLE IF NOT EXISTS users (
+     id SERIAL PRIMARY KEY,
+     username VARCHAR(255) UNIQUE NOT NULL,
+     email VARCHAR(255) UNIQUE NOT NULL,
+@@ -40,4 +40,38 @@ CREATE TABLE IF NOT EXISTS otp_codes (
+     used BOOLEAN DEFAULT FALSE,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+     expires_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP + INTERVAL '10 minutes')
++);*/
++CREATE TABLE IF NOT EXISTS users (
++    id INTEGER PRIMARY KEY AUTOINCREMENT,
++    username VARCHAR(255) UNIQUE NOT NULL,
++    email VARCHAR(255) UNIQUE NOT NULL,
++    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
++);
++
++CREATE TABLE IF NOT EXISTS webauthn_credentials (
++    id INTEGER PRIMARY KEY AUTOINCREMENT,
++    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
++    credential_id TEXT UNIQUE NOT NULL,
++    public_key TEXT NOT NULL,
++    sign_count INTEGER DEFAULT 0,
++    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
++);
++
++CREATE TABLE IF NOT EXISTS audit_logs (
++    id INTEGER PRIMARY KEY AUTOINCREMENT,
++    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
++    action VARCHAR(100) NOT NULL,
++    risk_score FLOAT DEFAULT 0.0,
++    ip_address VARCHAR(45),
++    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
++);
++
++CREATE TABLE IF NOT EXISTS otp_codes (
++    id INTEGER PRIMARY KEY AUTOINCREMENT,
++    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++    email VARCHAR(255) NOT NULL,
++    code VARCHAR(10) NOT NULL,
++    used BOOLEAN DEFAULT 0,
++    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
++    expires_at DATETIME DEFAULT (datetime('now', '+10 minutes'))
+ );
+\ No newline at end of file

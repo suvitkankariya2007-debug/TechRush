@@ -14,11 +14,11 @@ class UserCreate(BaseModel):
     user_agent: Optional[str] = None
 
 class UserResponse(BaseModel):
-    id:  UUID
+    id: str  # Stored as String(36) UUID in SQLite
     username: str
     email: str
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 

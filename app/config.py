@@ -5,13 +5,9 @@ from urllib.parse import quote_plus
 
 
 class Settings(BaseSettings):
-    # Database
-    DB_HOST: str = Field("127.0.0.1", env="DB_HOST")
-    DB_PORT: int = Field(5432, env="DB_PORT")
-    DB_USER: str = Field("", env="DB_USER")
-    DB_PASSWORD: str = Field("", env="DB_PASSWORD")
-    DB_NAME: str = Field("vaultid", env="DB_NAME")
-
+    # Database (Defaults to local SQLite to avoid connection-refused errors)
+    DATABASE_URL: str = Field("sqlite:///./vaultid.db", env="DATABASE_URL")
+    
     # JWT
     JWT_SECRET_KEY: str = Field(..., env="JWT_SECRET_KEY")
     TOKEN_EXPIRATION_MINUTES: int = Field(30, env="TOKEN_EXPIRATION_MINUTES")
@@ -34,11 +30,11 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_DSN(self) -> str:
-        """asyncpg connection string."""
-        return (
-            f"postgresql://{self.DB_USER}:{quote_plus(self.DB_PASSWORD)}"
-            f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        )
+        """Returns connection string safely for SQLAlchemy."""
+        url = self.DATABASE_URL
+        if url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql://", 1)
+        return url
 
     class Config:
         env_file = ".env"

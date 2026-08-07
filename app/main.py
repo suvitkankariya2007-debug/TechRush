@@ -15,7 +15,13 @@ from modules.m7_transaction_risk import TransactionRiskEngine
 from modules.m8_provenance_engine import ProvenanceEngine
 from app.config import PAYLOAD_RISK_SCORE
 
-app = FastAPI(title="VaultID Zero-Trust AI Risk Engine", version="2.0.0")
+app = FastAPI(
+    title="VaultID Zero-Trust AI Risk Engine",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
@@ -37,7 +43,7 @@ async def startup():
     try:
         await init_db_pool()
     except Exception as e:
-        print(f"[!] Warning: Database pool init deferred ({e})")
+        print(f"[!] Warning: Database init failed ({e})")
 
 
 @app.on_event("shutdown")
@@ -91,6 +97,9 @@ def get_provenance():
     return ProvenanceEngine.generate_originality_proof()
 
 
-# ── Frontend static files (TechRush/) ────────────────────────────────────────
+# ── Frontend static files (served LAST so it doesn't swallow API/docs routes) ─
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "TechRush"
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+else:
+    print(f"[VaultID] Warning: Frontend directory not found at {FRONTEND_DIR}. Skipping static mount.")

@@ -25,25 +25,25 @@ router = APIRouter(prefix="/api/v1/auth/webauthn", tags=["webauthn"])
 
 
 @router.post("/register/begin", response_model=WebAuthnRegBeginResponse)
-async def webauthn_register_begin(payload: WebAuthnRegBeginRequest, conn=Depends(get_db)):
-    user = await get_user_by_id(conn, payload.user_id)
+def webauthn_register_begin(payload: WebAuthnRegBeginRequest, db=Depends(get_db)):
+    user = get_user_by_id(db, payload.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     options_dict = generate_registration_options_for_user(
-        user_id=str(user["id"]),
-        username=user["email"],
-        display_name=user["email"]
+        user_id=str(user.id),
+        username=user.email,
+        display_name=user.email
     )
-    await store_challenge(conn, user["id"], options_dict["challenge"])
+    store_challenge(db, user.id, options_dict["challenge"])
     return WebAuthnRegBeginResponse(options=options_dict)
 
 
 @router.post("/register/complete", response_model=WebAuthnRegCompleteResponse)
-async def webauthn_register_complete(payload: WebAuthnRegCompleteRequest, conn=Depends(get_db)):
-    user = await get_user_by_id(conn, payload.user_id)
+def webauthn_register_complete(payload: WebAuthnRegCompleteRequest, db=Depends(get_db)):
+    user = get_user_by_id(db, payload.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    challenge_b64 = await get_challenge(conn, user["id"])
+    challenge_b64 = get_challenge(db, user.id)
     if not challenge_b64:
         raise HTTPException(status_code=400, detail="No active challenge")
     challenge = base64.b64decode(challenge_b64)
@@ -59,11 +59,11 @@ async def webauthn_register_complete(payload: WebAuthnRegCompleteRequest, conn=D
 
     credential_id = base64.b64encode(verification.credential_id).decode()
     public_key = base64.b64encode(verification.credential_public_key).decode()
-    await store_credential(
-        conn, user["id"], credential_id, public_key, verification.sign_count,
+    store_credential(
+        db, user.id, credential_id, public_key, verification.sign_count,
         device_name=payload.device_name
     )
-    await delete_challenge(conn, user["id"])
+    delete_challenge(db, user.id)
     return WebAuthnRegCompleteResponse(
         success=True,
         message="Credential registered",
@@ -72,31 +72,31 @@ async def webauthn_register_complete(payload: WebAuthnRegCompleteRequest, conn=D
 
 
 @router.post("/login/begin", response_model=WebAuthnLoginBeginResponse)
-async def webauthn_login_begin(payload: WebAuthnLoginBeginRequest, conn=Depends(get_db)):
-    user = await get_user_by_email(conn, payload.email)
+def webauthn_login_begin(payload: WebAuthnLoginBeginRequest, db=Depends(get_db)):
+    user = get_user_by_email(db, payload.email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    credentials = await get_credentials_by_user(conn, user["id"])
+    credentials = get_credentials_by_user(db, user.id)
     if not credentials:
-        return WebAuthnLoginBeginResponse(status="NO_PASSKEY", user_id=user["id"])
+        return WebAuthnLoginBeginResponse(status="NO_PASSKEY", user_id=user.id)
 
-    credential_ids = [c["credential_id"] for c in credentials]
+    credential_ids = [c.credential_id for c in credentials]
     options_dict = generate_authentication_options_for_user(credential_ids=credential_ids)
-    await store_challenge(conn, user["id"], options_dict["challenge"])
+    store_challenge(db, user.id, options_dict["challenge"])
     return WebAuthnLoginBeginResponse(
         status="PASSKEY_REQUIRED",
         webauthn_options=options_dict,
-        user_id=user["id"]
+        user_id=user.id
     )
 
 
 @router.post("/login/complete", response_model=WebAuthnLoginCompleteResponse)
-async def webauthn_login_complete(payload: WebAuthnLoginCompleteRequest, conn=Depends(get_db)):
-    user = await get_user_by_id(conn, payload.user_id)
+def webauthn_login_complete(payload: WebAuthnLoginCompleteRequest, db=Depends(get_db)):
+    user = get_user_by_id(db, payload.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    challenge_b64 = await get_challenge(conn, user["id"])
+    challenge_b64 = get_challenge(db, user.id)
     if not challenge_b64:
         raise HTTPException(status_code=400, detail="No active challenge")
     challenge = base64.b64decode(challenge_b64)
@@ -104,11 +104,11 @@ async def webauthn_login_complete(payload: WebAuthnLoginCompleteRequest, conn=De
     cred_id = payload.credential.get("id")
     if not cred_id:
         raise HTTPException(status_code=400, detail="Missing credential id")
-    credential = await get_credential_by_id(conn, cred_id)
+    credential = get_credential_by_id(db, cred_id)
     if not credential:
         raise HTTPException(status_code=404, detail="Credential not found")
 
-    public_key = base64.b64decode(credential["public_key"])
+    public_key = base64.b64decode(credential.public_key)
     try:
         verification = verify_authentication_response(
             credential=payload.credential,
@@ -116,14 +116,14 @@ async def webauthn_login_complete(payload: WebAuthnLoginCompleteRequest, conn=De
             expected_rp_id=settings.RP_ID,
             expected_origin=settings.ORIGIN,
             credential_public_key=public_key,
-            credential_sign_count=credential["sign_count"],
+            credential_sign_count=credential.sign_count,
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Verification failed: {str(e)}")
 
-    await update_sign_count(conn, cred_id, verification.new_sign_count)
-    await delete_challenge(conn, user["id"])
-    token = create_jwt(str(user["id"]))
+    update_sign_count(db, cred_id, verification.new_sign_count)
+    delete_challenge(db, user.id)
+    token = create_jwt(str(user.id))
     return WebAuthnLoginCompleteResponse(
         success=True,
         jwt_token=token,
