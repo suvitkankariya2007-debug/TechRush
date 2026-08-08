@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.models import User, UserDevice, OTPCode, WebAuthnChallenge, WebAuthnCredential, ActiveSession, LoginHistory
 
 def get_user_by_email(db: Session, email: str):
-    return db.query(User).filter(User.email == email).first()
+    from sqlalchemy import func
+    return db.query(User).filter(func.lower(User.email) == email.lower()).first()
 
 def get_user_by_id(db: Session, user_id: str):
     return db.query(User).filter(User.id == str(user_id)).first()
@@ -15,7 +16,7 @@ def get_user_by_id(db: Session, user_id: str):
 def get_user_by_username(db: Session, username: str):
     return db.query(User).filter(User.username == username).first()
 
-def create_user(db: Session, username: str, email: str, phone: str, device_fp: str, ip: str, ua: str):
+def create_user(db: Session, username: str, email: str, phone: str = "", device_fp: str = "", ip: str = "127.0.0.1", ua: str = ""):
     user = User(id=str(uuid.uuid4()), username=username, email=email, phone=phone)
     db.add(user)
     device = UserDevice(user_id=user.id, device_fingerprint=device_fp, ip_address=ip, user_agent=ua)

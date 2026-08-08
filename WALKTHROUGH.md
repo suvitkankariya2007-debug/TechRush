@@ -1,6 +1,6 @@
 # VaultID Backend — Endpoint Verification Log
 
-> **Last verified:** 2026-08-07 | **DB:** SQLite (`vaultid.db`) | **Server:** Uvicorn + FastAPI
+> **Last verified:** 2026-08-08 | **DB:** SQLite (`vaultid.db`) | **Server:** Uvicorn + FastAPI
 
 ---
 
@@ -15,6 +15,18 @@
 | `app/routers/webauthn.py` | Removed all `async`/`await` from crud calls (now sync ORM); fixed `user["id"]` → `user.id` |
 | `app/schemas.py` | `UserResponse.id` changed from `UUID` → `str` to match SQLite `String(36)` PK |
 | `app/main.py` | Added explicit `docs_url`, `redoc_url`, `openapi_url`; frontend static mount guarded with `exists()` check |
+
+### 🔧 Session 3 Fixes (2026-08-08)
+
+| File | Change |
+|------|--------|
+| `app/webauthn_helpers.py` | Wrapped `allow_credentials` items in `PublicKeyCredentialDescriptor` objects to prevent `AttributeError` when generating authentication options |
+| `app/webauthn_helpers.py` | Integrated `parse_registration_credential_json` and `parse_authentication_credential_json` helper functions from `webauthn.helpers` for robust credential parsing |
+| `app/routers/auth.py` | Updated `/qr/generate`, `/qr/status`, and `/qr/approve` endpoints to support true cross-device authentication and session approval |
+| `TechRush/qr-login.html` | Created a dedicated, mobile-friendly authorization view for Device A scanning |
+| `TechRush/script.js` | Fixed `@simplewebauthn/browser` parameter signature in `handlePasskeyLogin` by passing `optionsJSON` directly to eliminate `Cannot read properties of undefined (reading 'replace')` error |
+| `TechRush/script.js` | Updated direct link under QR code to use `window.location.origin` so local desktop clicking works seamlessly regardless of server host binding |
+| `app/routers/auth.py` | Resolved `localhost` to machine's local Wi-Fi IP (`10.10.11.84`) for external mobile device scanning |
 
 ---
 
@@ -119,3 +131,16 @@ All tables auto-created on startup via `Base.metadata.create_all()`:
 | `webauthn_credentials` | Registered passkey public keys |
 | `active_sessions` | Live JWT sessions |
 | `login_history` | Auth attempt audit log |
+
+### Testing Instruction & Verification
+To verify the user account creation flow end-to-end:
+1. Ensure the database is clean by running `python clear_db.py`.
+2. Start the Uvicorn server if not already running (`uvicorn app.main:app --reload`).
+3. Open a separate terminal and test the backend directly via cURL:
+   ```bash
+   curl -X POST http://127.0.0.1:8000/api/v1/auth/register         -H "Content-Type: application/json"         -d '{"username": "newuser", "email": "new@example.com", "phone": "1234567890"}'
+   ```
+   *Expected:* A `200 OK` response with a JSON payload containing the new `user_id`.
+4. Alternatively, use the Swagger UI at `http://127.0.0.1:8000/docs`. Navigate to `POST /api/v1/auth/register` and execute it with test data to confirm no 500 errors occur and a valid ID is returned.
+5. In the frontend, fill out the Create Account form and click Submit. The form should properly submit, save the user, and prompt you to log in with your newly registered passkey.
+

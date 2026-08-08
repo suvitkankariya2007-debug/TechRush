@@ -39,9 +39,27 @@
                     <span>or continue with</span>
                 </div>
 
-                <button id="switchToOtp" type="button" class="btn btn-secondary btn-block">
-                    <i class="fas fa-mobile-screen"></i> Verification Code
-                </button>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem;">
+                    <button id="switchToOtp" type="button" class="btn btn-secondary btn-block">
+                        <i class="fas fa-mobile-screen"></i> Verification Code
+                    </button>
+                    <button id="showQrBtn" type="button" class="btn btn-secondary btn-block">
+                        <i class="fas fa-qrcode"></i> QR Login
+                    </button>
+                </div>
+
+                <!-- QR CODE LOGIN SECTION -->
+                <div id="qrLoginArea" class="qr-area hidden" style="text-align: center; margin-top: 1rem; padding: 1rem; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <p style="font-size: 0.85rem; color: #475569; margin-bottom: 0.5rem;">Scan QR code with mobile camera or secondary device to authorize</p>
+                    <div id="qrCodeContainer" style="display: flex; justify-content: center; align-items: center; min-height: 160px;">
+                        <img id="qrImage" src="" alt="QR Login" style="width: 150px; height: 150px; border-radius: 8px; display: none;">
+                        <span id="qrLoadingText" style="color: #64748b; font-size: 0.85rem;">Generating QR session...</span>
+                    </div>
+                    <p id="qrSessionStatus" style="font-size: 0.775rem; color: #16a34a; margin-top: 0.5rem; font-weight: 600;">Status: Waiting for device scan...</p>
+                    <div id="qrLinkContainer" style="margin-top: 0.5rem; font-size: 0.775rem;">
+                        <a id="qrDirectLink" href="#" target="_blank" style="color: #0284c7; text-decoration: underline; word-break: break-all; display: none;">Or open approval link on Device A</a>
+                    </div>
+                </div>
 
                 <!-- OTP FALLBACK SECTION -->
                 <div id="otpFallbackArea" class="otp-area hidden">
@@ -78,21 +96,23 @@
             </div>
 
             <div class="auth-body">
-                <div class="form-group">
-                    <label for="regFirstName">Username</label>
-                    <input type="text" id="regFirstName" class="form-control" placeholder="johndoe">
-                </div>
-                <div class="form-group">
-                    <label for="regEmail">Email address</label>
-                    <input type="email" id="regEmail" class="form-control" placeholder="john@example.com">
-                </div>
-                <div class="form-group">
-                    <label for="regLastName">Phone number (Optional)</label>
-                    <input type="text" id="regLastName" class="form-control" placeholder="+1 234 567 890">
-                </div>
-                <button id="registerBtn" class="btn btn-primary btn-block">
-                    <i class="fas fa-user-plus"></i> Create Account
-                </button>
+                <form id="registerForm">
+                    <div class="form-group">
+                        <label for="regFirstName">Username</label>
+                        <input type="text" id="regFirstName" class="form-control" placeholder="johndoe" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="regEmail">Email address</label>
+                        <input type="email" id="regEmail" class="form-control" placeholder="john@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="regLastName">Phone number (Optional)</label>
+                        <input type="text" id="regLastName" class="form-control" placeholder="+1 234 567 890">
+                    </div>
+                    <button type="submit" id="registerBtn" class="btn btn-primary btn-block">
+                        <i class="fas fa-user-plus"></i> Create Account
+                    </button>
+                </form>
             </div>
 
             <div class="auth-footer">
@@ -197,7 +217,7 @@
                 <!-- TAB 4: SECURITY -->
                 <div id="tabSecurity" class="tab-pane hidden">
                     <div class="card">
-                        <h3>Security Alerts</h3>
+                        <h3><i class="fas fa-shield-halved"></i> Security Alerts</h3>
                         <div id="alertList" style="margin-top: 1rem;"></div>
                     </div>
                 </div>

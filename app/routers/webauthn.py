@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from app.database import get_db
 from app.schemas import (
     WebAuthnRegBeginRequest, WebAuthnRegBeginResponse,
@@ -15,50 +15,68 @@ from app.webauthn_helpers import (
     generate_registration_options_for_user,
     verify_registration_response,
     generate_authentication_options_for_user,
-    verify_authentication_response
+    verify_authentication_response,
+    safe_b64decode
 )
 from app.jwt import create_jwt
 from app.config import settings
+from urllib.parse import urlparse
 import base64
 
 router = APIRouter(prefix="/api/v1/auth/webauthn", tags=["webauthn"])
 
 
+def _get_origin_and_rpid(request: Request):
+    """Extract the real origin and rpId from the incoming request headers."""
+    origin = request.headers.get("origin")
+    if origin:
+        hostname = urlparse(origin).hostname
+        return origin, hostname or settings.RP_ID
+    referer = request.headers.get("referer")
+    if referer:
+        parsed = urlparse(referer)
+        return f"{parsed.scheme}://{parsed.netloc}", parsed.hostname or settings.RP_ID
+    return settings.ORIGIN, settings.RP_ID
+
+
 @router.post("/register/begin", response_model=WebAuthnRegBeginResponse)
-def webauthn_register_begin(payload: WebAuthnRegBeginRequest, db=Depends(get_db)):
+def webauthn_register_begin(payload: WebAuthnRegBeginRequest, request: Request, db=Depends(get_db)):
     user = get_user_by_id(db, payload.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    _origin, rp_id = _get_origin_and_rpid(request)
     options_dict = generate_registration_options_for_user(
         user_id=str(user.id),
         username=user.email,
-        display_name=user.email
+        display_name=user.email,
+        rp_id=rp_id
     )
     store_challenge(db, user.id, options_dict["challenge"])
     return WebAuthnRegBeginResponse(options=options_dict)
 
 
 @router.post("/register/complete", response_model=WebAuthnRegCompleteResponse)
-def webauthn_register_complete(payload: WebAuthnRegCompleteRequest, db=Depends(get_db)):
+def webauthn_register_complete(payload: WebAuthnRegCompleteRequest, request: Request, db=Depends(get_db)):
     user = get_user_by_id(db, payload.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     challenge_b64 = get_challenge(db, user.id)
     if not challenge_b64:
         raise HTTPException(status_code=400, detail="No active challenge")
-    challenge = base64.b64decode(challenge_b64)
+    challenge = safe_b64decode(challenge_b64)
+    expected_origin, expected_rpid = _get_origin_and_rpid(request)
     try:
         verification = verify_registration_response(
             credential=payload.credential,
             challenge=challenge,
-            expected_rp_id=settings.RP_ID,
-            expected_origin=settings.ORIGIN,
+            expected_rp_id=expected_rpid,
+            expected_origin=expected_origin,
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Verification failed: {str(e)}")
 
-    credential_id = base64.b64encode(verification.credential_id).decode()
-    public_key = base64.b64encode(verification.credential_public_key).decode()
+    credential_id = base64.urlsafe_b64encode(verification.credential_id).decode().rstrip("=")
+    public_key = base64.urlsafe_b64encode(verification.credential_public_key).decode().rstrip("=")
     store_credential(
         db, user.id, credential_id, public_key, verification.sign_count,
         device_name=payload.device_name
@@ -72,7 +90,7 @@ def webauthn_register_complete(payload: WebAuthnRegCompleteRequest, db=Depends(g
 
 
 @router.post("/login/begin", response_model=WebAuthnLoginBeginResponse)
-def webauthn_login_begin(payload: WebAuthnLoginBeginRequest, db=Depends(get_db)):
+def webauthn_login_begin(payload: WebAuthnLoginBeginRequest, request: Request, db=Depends(get_db)):
     user = get_user_by_email(db, payload.email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -81,8 +99,9 @@ def webauthn_login_begin(payload: WebAuthnLoginBeginRequest, db=Depends(get_db))
     if not credentials:
         return WebAuthnLoginBeginResponse(status="NO_PASSKEY", user_id=user.id)
 
+    _origin, rp_id = _get_origin_and_rpid(request)
     credential_ids = [c.credential_id for c in credentials]
-    options_dict = generate_authentication_options_for_user(credential_ids=credential_ids)
+    options_dict = generate_authentication_options_for_user(credential_ids=credential_ids, rp_id=rp_id)
     store_challenge(db, user.id, options_dict["challenge"])
     return WebAuthnLoginBeginResponse(
         status="PASSKEY_REQUIRED",
@@ -92,14 +111,14 @@ def webauthn_login_begin(payload: WebAuthnLoginBeginRequest, db=Depends(get_db))
 
 
 @router.post("/login/complete", response_model=WebAuthnLoginCompleteResponse)
-def webauthn_login_complete(payload: WebAuthnLoginCompleteRequest, db=Depends(get_db)):
+def webauthn_login_complete(payload: WebAuthnLoginCompleteRequest, request: Request, db=Depends(get_db)):
     user = get_user_by_id(db, payload.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     challenge_b64 = get_challenge(db, user.id)
     if not challenge_b64:
         raise HTTPException(status_code=400, detail="No active challenge")
-    challenge = base64.b64decode(challenge_b64)
+    challenge = safe_b64decode(challenge_b64)
 
     cred_id = payload.credential.get("id")
     if not cred_id:
@@ -108,13 +127,14 @@ def webauthn_login_complete(payload: WebAuthnLoginCompleteRequest, db=Depends(ge
     if not credential:
         raise HTTPException(status_code=404, detail="Credential not found")
 
-    public_key = base64.b64decode(credential.public_key)
+    expected_origin, expected_rpid = _get_origin_and_rpid(request)
+    public_key = safe_b64decode(credential.public_key)
     try:
         verification = verify_authentication_response(
             credential=payload.credential,
             challenge=challenge,
-            expected_rp_id=settings.RP_ID,
-            expected_origin=settings.ORIGIN,
+            expected_rp_id=expected_rpid,
+            expected_origin=expected_origin,
             credential_public_key=public_key,
             credential_sign_count=credential.sign_count,
         )

@@ -3,6 +3,12 @@
  * VaultID - User Portal Frontend Script (Complete with Guaranteed Activity Rendering)
  */
 
+// WebAuthn requires rpId ("localhost") to match the page hostname exactly.
+// If the user visits via 127.0.0.1, passkey ceremonies throw DOMException.
+if (window.location.hostname === '127.0.0.1') {
+    window.location.replace(window.location.href.replace('127.0.0.1', 'localhost'));
+}
+
 // Automatically use the current host (works for localhost and local network IPs)
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000/api/v1`;
 
@@ -78,6 +84,10 @@ function startSessionTimer() {
 
 // ===== PASSKEY PROMPT / REGISTRATION =====
 async function registerPasskeyForUser(userId) {
+    if (!userId) {
+        showToast('Cannot register passkey: User ID missing', 'error');
+        return false;
+    }
     showToast('🔑 Opening WebAuthn Passkey Registration...', 'info');
 
     try {
@@ -96,21 +106,33 @@ async function registerPasskeyForUser(userId) {
         const webAuthn = window.SimpleWebAuthnBrowser || window.SimpleWebAuthn;
 
         if (!webAuthn || typeof webAuthn.startRegistration !== 'function') {
-            throw new Error('SimpleWebAuthn library missing in HTML head tag.');
+            throw new Error('SimpleWebAuthn browser library missing in HTML head tag.');
         }
 
-        let opts = beginData.optionsJSON || beginData.webauthn_options || beginData.options || beginData;
-        if (typeof opts === 'string') {
-            try { opts = JSON.parse(opts); } catch (_) {}
+        let optionsJSON = beginData.optionsJSON || beginData.options || beginData;
+        if (typeof optionsJSON === 'string') {
+            try { optionsJSON = JSON.parse(optionsJSON); } catch (_) {}
         }
-        if (opts.optionsJSON) {
-            opts = opts.optionsJSON;
-        }
-        if (!opts.challenge && opts.publicKey) {
-            opts = opts.publicKey;
+        if (optionsJSON.options) {
+            optionsJSON = optionsJSON.options;
         }
 
-        const attestationResponse = await webAuthn.startRegistration(opts);
+        let attestationResponse;
+        try {
+            attestationResponse = await webAuthn.startRegistration(optionsJSON);
+        } catch (e1) {
+            if (e1.name === 'NotAllowedError') {
+                throw new Error('Passkey creation cancelled or timed out.');
+            }
+            try {
+                attestationResponse = await webAuthn.startRegistration({ optionsJSON });
+            } catch (e2) {
+                if (e2.name === 'NotAllowedError') {
+                    throw new Error('Passkey creation cancelled or timed out.');
+                }
+                throw e1;
+            }
+        }
 
         const completeRes = await fetch(`${API_BASE}/auth/webauthn/register/complete`, {
             method: 'POST',
@@ -129,7 +151,7 @@ async function registerPasskeyForUser(userId) {
 
         const completeData = await completeRes.json();
         if (completeData.success || completeData.status === 'SUCCESS') {
-            showToast('🎉 Passkey successfully registered to this device!', 'success');
+            showToast('🎉 Passkey successfully created and saved in database!', 'success');
             return true;
         } else {
             throw new Error(completeData.message || 'Passkey registration rejected');
@@ -176,15 +198,25 @@ async function handleCreateAccount(event) {
         }
 
         const data = await res.json();
+        console.log('[VaultID] Account created:', data);
         showToast('Account created successfully!', 'success');
 
-        await registerPasskeyForUser(data.id);
+        // Trigger passkey registration prompt
+        const passkeySuccess = await registerPasskeyForUser(data.id);
 
-        handleLoginSuccess({
-            id: data.id,
-            email: data.email,
-            username: data.username
-        });
+        if (passkeySuccess) {
+            showToast('✅ Account secured with passkey! Please login now.', 'success');
+        } else {
+            showToast('Account created! Note: Passkey was not saved. You can register passkey anytime or sign in with OTP.', 'info');
+        }
+
+        // Switch to login view
+        document.getElementById('page-register')?.classList.add('hidden');
+        document.getElementById('page-login')?.classList.remove('hidden');
+        
+        const loginEmail = document.getElementById('loginEmail');
+        if (loginEmail) loginEmail.value = data.email;
+        
     } catch (err) {
         console.error('Registration Error:', err);
         showToast(`Registration failed: ${err.message}`, 'error');
@@ -223,29 +255,52 @@ async function handlePasskeyLogin(event) {
         }
 
         const beginData = await beginRes.json();
-        const webAuthn = window.SimpleWebAuthnBrowser || window.SimpleWebAuthn;
+        
+        if (beginData.status === 'NO_PASSKEY') {
+            throw new Error('No passkey registered for this account. Please sign in via Verification Code and add a passkey in Security.');
+        }
 
+        const webAuthn = window.SimpleWebAuthnBrowser || window.SimpleWebAuthn;
         if (!webAuthn || typeof webAuthn.startAuthentication !== 'function') {
             throw new Error('SimpleWebAuthn library missing in HTML head tag.');
         }
 
         showToast('Touch sensor or enter device PIN now...', 'info');
-        
-        let optionsPayload = beginData.optionsJSON || beginData.webauthn_options || beginData.options || beginData;
-        if (typeof optionsPayload === 'string') {
-            try { optionsPayload = JSON.parse(optionsPayload); } catch (_) {}
+
+        let optionsJSON = beginData.webauthn_options || beginData.optionsJSON || beginData.options || beginData;
+        if (typeof optionsJSON === 'string') {
+            try { optionsJSON = JSON.parse(optionsJSON); } catch (_) {}
         }
-        if (optionsPayload.optionsJSON) {
-            optionsPayload = optionsPayload.optionsJSON;
+        if (optionsJSON.options) {
+            optionsJSON = optionsJSON.options;
         }
 
-        const assertionResponse = await webAuthn.startAuthentication({ optionsJSON: optionsPayload });
+        let assertionResponse;
+        try {
+            assertionResponse = await webAuthn.startAuthentication(optionsJSON);
+        } catch (e1) {
+            if (e1.name === 'NotAllowedError') {
+                throw new Error('Authentication cancelled by user or timed out.');
+            }
+            try {
+                assertionResponse = await webAuthn.startAuthentication({ optionsJSON });
+            } catch (e2) {
+                if (e2.name === 'NotAllowedError') {
+                    throw new Error('Authentication cancelled by user or timed out.');
+                }
+                throw e1;
+            }
+        }
+
+        if (!assertionResponse) {
+            throw new Error('Authentication cancelled or failed');
+        }
 
         const completeRes = await fetch(`${API_BASE}/auth/webauthn/login/complete`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                user_id: beginData.user_id || optionsPayload.user_id,
+                user_id: beginData.user_id || optionsJSON.user_id,
                 credential: assertionResponse,
                 device_fingerprint: 'fp_local',
                 ip_address: '127.0.0.1',
@@ -272,6 +327,88 @@ async function handlePasskeyLogin(event) {
     } catch (err) {
         console.error('Passkey Auth Error:', err);
         showToast(`Passkey error: ${err.message}`, 'error');
+    }
+}
+
+// ===== QR CODE LOGIN & POLLING =====
+let qrPollTimer = null;
+
+async function toggleQrArea() {
+    const qrArea = document.getElementById('qrLoginArea');
+    if (!qrArea) return;
+
+    qrArea.classList.toggle('hidden');
+
+    if (!qrArea.classList.contains('hidden')) {
+        await startQrSession();
+    } else {
+        if (qrPollTimer) clearInterval(qrPollTimer);
+    }
+}
+
+async function startQrSession() {
+    const imgEl = document.getElementById('qrImage');
+    const loadingEl = document.getElementById('qrLoadingText');
+    const statusEl = document.getElementById('qrSessionStatus');
+    const directLinkEl = document.getElementById('qrDirectLink');
+
+    if (loadingEl) loadingEl.style.display = 'block';
+    if (imgEl) imgEl.style.display = 'none';
+    if (statusEl) statusEl.textContent = 'Status: Initializing QR session...';
+
+    try {
+        const res = await fetch(`${API_BASE}/auth/qr/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!res.ok) {
+            const errorMsg = await parseResponseError(res, 'Failed to generate QR code');
+            throw new Error(errorMsg);
+        }
+
+        const data = await res.json();
+        console.log('[VaultID] QR Session generated:', data);
+
+        if (imgEl && data.qr_code_url) {
+            imgEl.src = data.qr_code_url;
+            imgEl.style.display = 'block';
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+
+        if (directLinkEl && data.session_id) {
+            directLinkEl.href = `${window.location.origin}/qr-login.html?session_id=${data.session_id}`;
+            directLinkEl.style.display = 'inline-block';
+        }
+
+        if (statusEl) statusEl.textContent = 'Status: Waiting for device scan...';
+
+        if (qrPollTimer) clearInterval(qrPollTimer);
+        qrPollTimer = setInterval(() => pollQrStatus(data.session_id), 2000);
+
+    } catch (err) {
+        console.error('QR Gen Error:', err);
+        showToast(`QR Error: ${err.message}`, 'error');
+        if (statusEl) statusEl.textContent = 'Status: Error generating QR code';
+    }
+}
+
+async function pollQrStatus(sessionId) {
+    try {
+        const res = await fetch(`${API_BASE}/auth/qr/status?session_id=${sessionId}`);
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (data.status === 'APPROVED' && data.user) {
+            if (qrPollTimer) clearInterval(qrPollTimer);
+            showToast(`✅ Cross-device session approved for ${data.user.email}!`, 'success');
+            const statusEl = document.getElementById('qrSessionStatus');
+            if (statusEl) statusEl.textContent = `Status: Approved! Logging in as ${data.user.username}...`;
+
+            handleLoginSuccess(data.user);
+        }
+    } catch (err) {
+        console.warn('QR poll warning:', err);
     }
 }
 
@@ -659,6 +796,11 @@ async function handleQuickActionSubmit() {
         }
 
         const beginData = await beginRes.json();
+        
+        if (beginData.status === 'NO_PASSKEY') {
+            throw new Error('No passkey registered for this account');
+        }
+
         let optionsPayload = beginData.optionsJSON || beginData.webauthn_options || beginData.options || beginData;
         if (typeof optionsPayload === 'string') {
             try { optionsPayload = JSON.parse(optionsPayload); } catch (_) {}
@@ -668,7 +810,10 @@ async function handleQuickActionSubmit() {
         }
 
         const webAuthn = window.SimpleWebAuthnBrowser || window.SimpleWebAuthn;
-        await webAuthn.startAuthentication({ optionsJSON: optionsPayload });
+        const assertionResponse = await webAuthn.startAuthentication(optionsPayload);
+        if (!assertionResponse) {
+            throw new Error('Authentication cancelled or failed');
+        }
 
         const txRes = await fetch(`${API_BASE}/user/${State.user.id}/transfer`, {
             method: 'POST',
@@ -693,7 +838,7 @@ async function handleQuickActionSubmit() {
 // ===== EVENT BINDING =====
 function bindEvents() {
     document.getElementById('loginPasskeyBtn')?.addEventListener('click', handlePasskeyLogin);
-    document.getElementById('registerBtn')?.addEventListener('click', handleCreateAccount);
+    document.getElementById('registerForm')?.addEventListener('submit', handleCreateAccount);
 
     document.getElementById('goToRegister')?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -708,6 +853,7 @@ function bindEvents() {
     });
 
     document.getElementById('switchToOtp')?.addEventListener('click', toggleOtpArea);
+    document.getElementById('showQrBtn')?.addEventListener('click', toggleQrArea);
     document.getElementById('verifyOtpBtn')?.addEventListener('click', handleOtpVerify);
     document.getElementById('resendOtp')?.addEventListener('click', () => {
         const email = document.getElementById('loginEmail')?.value.trim();
